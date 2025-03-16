@@ -317,12 +317,12 @@ private:
 private:
 	unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> m_Window{ nullptr, glfwDestroyWindow };
 
-	static inline function<void(VkInstance)>Delete_VK_Instance{ std::bind(vkDestroyInstance, placeholders::_1, nullptr) };
+	static constexpr auto Delete_VK_Instance = [](VkInstance Instance) {if (nullptr != Instance)vkDestroyInstance(Instance, nullptr); };
 	unique_ptr<VkInstance_T, decltype(Delete_VK_Instance)> m_VK_Instance{ nullptr ,Delete_VK_Instance };
 
 	VkPhysicalDevice m_Physical_Device{ nullptr };
 
-	static inline function<void(VkDevice)> Delete_VK_Device{ std::bind(vkDestroyDevice, placeholders::_1, nullptr) };
+	static constexpr auto Delete_VK_Device = [](VkDevice Device) {if (nullptr != Device)vkDestroyDevice(Device, nullptr); };
 	unique_ptr<VkDevice_T, decltype(Delete_VK_Device)> m_Logical_Device{ nullptr, Delete_VK_Device };
 
 	VkQueue m_Graphics_Queue{ nullptr };
