@@ -165,6 +165,7 @@ private:
 		this->Pick_Physical_Device();
 		this->Create_Logical_Device();
 		this->Create_SwapChain();
+		this->Create_SwapChhain_Image_View();
 	}
 
 	void Main_Loop(void) {
@@ -174,6 +175,12 @@ private:
 
 	void Clean_Up(void) {
 		//NOTE : Clean Up Logical Device Before Instance and ,First Clean Command Queue Before Logical Device
+
+		for (auto& Image_View : this->m_Swap_Chain_Image_Views) {
+			//vkDestroyImageView(this->m_Logical_Device.get(), Image_View.get(), nullptr);
+
+			Image_View.reset();
+		}
 
 		//vkDestroySwapchainKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), nullptr);
 		this->m_Swap_Chain.reset();
@@ -392,6 +399,46 @@ private:
 		this->m_Swap_Chain_Extent = Swap_Chain_Extent;
 	}
 
+	void Create_SwapChhain_Image_View(void) {
+
+		VkComponentMapping Component_Mapping{};
+		{
+			Component_Mapping.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+			Component_Mapping.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			Component_Mapping.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			Component_Mapping.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+		}
+
+		VkImageSubresourceRange Subresource_Range{};
+		{
+			Subresource_Range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			Subresource_Range.baseMipLevel = 0;
+			Subresource_Range.levelCount = 1;
+			Subresource_Range.baseArrayLayer = 0;
+			Subresource_Range.layerCount = 1;
+		}
+
+		this->m_Swap_Chain_Image_Views.resize(this->m_Swap_Chain_Images.size());
+		for (size_t Index = 0; Index < this->m_Swap_Chain_Images.size(); ++Index) {
+			VkImageViewCreateInfo Image_View_Create_Info{};
+			{
+				Image_View_Create_Info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+				Image_View_Create_Info.image = this->m_Swap_Chain_Images[Index];
+				Image_View_Create_Info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+				Image_View_Create_Info.format = this->m_Swap_Chain_Image_Format;
+				Image_View_Create_Info.components = Component_Mapping;
+				Image_View_Create_Info.subresourceRange = Subresource_Range;
+			}
+
+			VkImageView Image_View{ nullptr };
+			if (VK_SUCCESS != vkCreateImageView(this->m_Logical_Device.get(), &Image_View_Create_Info, nullptr, &Image_View))
+				throw runtime_error("Failed to create image views!");
+			this->m_Swap_Chain_Image_Views[Index].get_deleter() = [Device = this->m_Logical_Device.get()](VkImageView Image_View) {if (nullptr != Image_View) vkDestroyImageView(Device, Image_View, nullptr); };
+			this->m_Swap_Chain_Image_Views[Index].reset(Image_View);
+		}
+
+	}
+
 private:
 	uint32_t Find_Queue_Families(VkQueueFlagBits Vk_Queue_FlagBit) const {
 		uint32_t Queue_Family_Count;
@@ -431,7 +478,6 @@ private:
 		}
 		else
 			throw runtime_error("Failed to find a suitable GPU!");
-
 	}
 
 	const VkExtent2D Choose_SwapChain_Extent(const VkSurfaceCapabilitiesKHR& Capabilities) {
@@ -551,9 +597,11 @@ private:
 	unique_ptr<VkSwapchainKHR_T, function<void(VkSwapchainKHR)>> m_Swap_Chain{ nullptr };
 
 	Swap_Chain_Support_Details m_Swap_Chain_Support_Details{};
+
 	vector<VkImage> m_Swap_Chain_Images{};
 	VkFormat m_Swap_Chain_Image_Format{};
 	VkExtent2D m_Swap_Chain_Extent{};
+	vector<unique_ptr<VkImageView_T, function<void(VkImageView)>>> m_Swap_Chain_Image_Views{};
 
 };
 
