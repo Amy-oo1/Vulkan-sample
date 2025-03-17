@@ -25,6 +25,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "fix_function", "fix_functio
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "renderpass", "renderpass\renderpass.vcxproj", "{E635B1BB-704E-45F3-8A6C-13AA3444059A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "graphicspipeline_complete", "graphicspipeline_complete\graphicspipeline_complete.vcxproj", "{65E1726A-BA2E-4E85-A235-462F336582DE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -121,6 +123,14 @@ Global
 		{E635B1BB-704E-45F3-8A6C-13AA3444059A}.Release|x64.Build.0 = Release|x64
 		{E635B1BB-704E-45F3-8A6C-13AA3444059A}.Release|x86.ActiveCfg = Release|Win32
 		{E635B1BB-704E-45F3-8A6C-13AA3444059A}.Release|x86.Build.0 = Release|Win32
+		{65E1726A-BA2E-4E85-A235-462F336582DE}.Debug|x64.ActiveCfg = Debug|x64
+		{65E1726A-BA2E-4E85-A235-462F336582DE}.Debug|x64.Build.0 = Debug|x64
+		{65E1726A-BA2E-4E85-A235-462F336582DE}.Debug|x86.ActiveCfg = Debug|Win32
+		{65E1726A-BA2E-4E85-A235-462F336582DE}.Debug|x86.Build.0 = Debug|Win32
+		{65E1726A-BA2E-4E85-A235-462F336582DE}.Release|x64.ActiveCfg = Release|x64
+		{65E1726A-BA2E-4E85-A235-462F336582DE}.Release|x64.Build.0 = Release|x64
+		{65E1726A-BA2E-4E85-A235-462F336582DE}.Release|x86.ActiveCfg = Release|Win32
+		{65E1726A-BA2E-4E85-A235-462F336582DE}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
