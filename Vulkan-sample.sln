@@ -21,6 +21,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "imageviews", "imageviews\im
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "graphics_pipeline", "graphics_pipeline\graphics_pipeline.vcxproj", "{DA90C638-A053-49AC-8AFD-1D17769C024A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "fix_function", "fix_function\fix_function.vcxproj", "{E1BF8950-14EF-4D75-AD15-537B07A24C9A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -101,6 +103,14 @@ Global
 		{DA90C638-A053-49AC-8AFD-1D17769C024A}.Release|x64.Build.0 = Release|x64
 		{DA90C638-A053-49AC-8AFD-1D17769C024A}.Release|x86.ActiveCfg = Release|Win32
 		{DA90C638-A053-49AC-8AFD-1D17769C024A}.Release|x86.Build.0 = Release|Win32
+		{E1BF8950-14EF-4D75-AD15-537B07A24C9A}.Debug|x64.ActiveCfg = Debug|x64
+		{E1BF8950-14EF-4D75-AD15-537B07A24C9A}.Debug|x64.Build.0 = Debug|x64
+		{E1BF8950-14EF-4D75-AD15-537B07A24C9A}.Debug|x86.ActiveCfg = Debug|Win32
+		{E1BF8950-14EF-4D75-AD15-537B07A24C9A}.Debug|x86.Build.0 = Debug|Win32
+		{E1BF8950-14EF-4D75-AD15-537B07A24C9A}.Release|x64.ActiveCfg = Release|x64
+		{E1BF8950-14EF-4D75-AD15-537B07A24C9A}.Release|x64.Build.0 = Release|x64
+		{E1BF8950-14EF-4D75-AD15-537B07A24C9A}.Release|x86.ActiveCfg = Release|Win32
+		{E1BF8950-14EF-4D75-AD15-537B07A24C9A}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
