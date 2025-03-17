@@ -31,6 +31,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "framebuffer", "framebuffer\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "commandbuffer", "commandbuffer\commandbuffer.vcxproj", "{FEDEFD04-7C0E-471E-B97D-A93183E84161}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Present", "Present\Present.vcxproj", "{404F9107-CAC7-4668-B755-65A63074586D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -151,6 +153,14 @@ Global
 		{FEDEFD04-7C0E-471E-B97D-A93183E84161}.Release|x64.Build.0 = Release|x64
 		{FEDEFD04-7C0E-471E-B97D-A93183E84161}.Release|x86.ActiveCfg = Release|Win32
 		{FEDEFD04-7C0E-471E-B97D-A93183E84161}.Release|x86.Build.0 = Release|Win32
+		{404F9107-CAC7-4668-B755-65A63074586D}.Debug|x64.ActiveCfg = Debug|x64
+		{404F9107-CAC7-4668-B755-65A63074586D}.Debug|x64.Build.0 = Debug|x64
+		{404F9107-CAC7-4668-B755-65A63074586D}.Debug|x86.ActiveCfg = Debug|Win32
+		{404F9107-CAC7-4668-B755-65A63074586D}.Debug|x86.Build.0 = Debug|Win32
+		{404F9107-CAC7-4668-B755-65A63074586D}.Release|x64.ActiveCfg = Release|x64
+		{404F9107-CAC7-4668-B755-65A63074586D}.Release|x64.Build.0 = Release|x64
+		{404F9107-CAC7-4668-B755-65A63074586D}.Release|x86.ActiveCfg = Release|Win32
+		{404F9107-CAC7-4668-B755-65A63074586D}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
