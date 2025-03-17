@@ -165,6 +165,7 @@ private:
 		this->Create_Surface();
 		this->Pick_Physical_Device();
 		this->Create_Logical_Device();
+		this->Create_SwapChain();
 	}
 
 	void Main_Loop(void) {
@@ -348,7 +349,6 @@ private:
 		uint32_t Image_Count{ this->m_Swap_Chain_Support_Details.Capabilities.minImageCount + 1 };
 		Image_Count = std::clamp(Image_Count, this->m_Swap_Chain_Support_Details.Capabilities.minImageCount, this->m_Swap_Chain_Support_Details.Capabilities.maxImageCount);
 
-
 		vector<uint32_t> Queue_Family_Indices{ this->m_Queue_Family_Indices.Graphics_Family };
 		VkSharingMode Sharing_Mode{ VK_SHARING_MODE_EXCLUSIVE };
 
@@ -440,10 +440,7 @@ private:
 		else {
 			int Width, Height;
 			glfwGetFramebufferSize(this->m_Window.get(), &Width, &Height);
-			VkExtent2D Actual_Extent{
-				static_cast<uint32_t>(Width),
-				static_cast<uint32_t>(Height)
-			};
+			VkExtent2D Actual_Extent{ static_cast<uint32_t>(Width),static_cast<uint32_t>(Height) };
 
 			Actual_Extent.width = std::clamp(Actual_Extent.width, Capabilities.minImageExtent.width, Capabilities.maxImageExtent.width);
 			Actual_Extent.height = std::clamp(Actual_Extent.height, Capabilities.minImageExtent.height, Capabilities.maxImageExtent.height);
@@ -554,6 +551,7 @@ private:
 	vector<VkImage> m_Swap_Chain_Images{};
 	VkFormat m_Swap_Chain_Image_Format{};
 	VkExtent2D m_Swap_Chain_Extent{};
+
 };
 
 int main() {

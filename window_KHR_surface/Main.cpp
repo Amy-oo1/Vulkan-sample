@@ -348,6 +348,7 @@ private:
 		this->m_Surface.get_deleter() = [Instance = this->m_VK_Instance.get()](VkSurfaceKHR Surface) {vkDestroySurfaceKHR(Instance, Surface, nullptr); };
 		this->m_Surface.reset(Surface);
 	}
+
 private:
 	static void Initialize_GLWF(void) {
 		if (GLFW_FALSE == glfwInit())
