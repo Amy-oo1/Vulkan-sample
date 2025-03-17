@@ -28,7 +28,6 @@ const constexpr char* Device_EXT_SwapChain{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 class VK_Application final {
 private:
-private:
 	struct Queue_Family_Indices final {
 		uint32_t Graphics_Family;
 		uint32_t Present_Family;
