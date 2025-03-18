@@ -196,6 +196,9 @@ private:
 		if (nullptr == window)
 			throw std::runtime_error("Failed to create GLFW window");
 		this->m_Window.reset(window);
+
+		glfwSetWindowUserPointer(this->m_Window.get(), this);
+		glfwSetFramebufferSizeCallback(this->m_Window.get(), VK_Application::Frame_Buffer_Resize_CallBack);
 	}
 
 	void Init_Vulkan(void) {
@@ -213,7 +216,7 @@ private:
 		this->Pick_Physical_Device();
 		this->Create_Logical_Device();
 		this->Create_SwapChain();
-		this->Create_SwapChhain_Image_View();
+		this->Create_SwapChhain_Image_Views();
 		this->Create_Render_Pass();
 		this->Create_GraphicsPipeline();
 		this->Create_Frame_Buffers();
@@ -231,8 +234,25 @@ private:
 		THROW_IF_VK_FAILED(vkDeviceWaitIdle(this->m_Logical_Device.get()));
 	}
 
+	void CleanUp_SwapChain(void) {
+		for (auto& Framebuffer : this->m_Swap_Chain_Frame_buffers) {
+			//vkDestroyFramebuffer(this->m_Logical_Device.get(), Framebuffer.get(), nullptr);
+			Framebuffer.reset();
+		}
+
+		for (auto& Image_View : this->m_Swap_Chain_Image_Views) {
+			//vkDestroyImageView(this->m_Logical_Device.get(), Image_View.get(), nullptr);
+
+			Image_View.reset();
+		}
+
+		this->m_Swap_Chain.reset();
+	}
+
 	void CleanUp(void) {
 		//NOTE : Clean Up Logical Device Before Instance and ,First Clean Command Queue Before Logical Device
+
+		this->CleanUp_SwapChain();
 
 		for (size_t Index = 0; Index < MAX_FRAMES_IN_FLIGHT; ++Index) {
 			//vkDestroySemaphore(this->m_Logical_Device.get(), this->m_Render_Finished_Semaphores[Index].get(), nullptr);
@@ -248,10 +268,11 @@ private:
 		//vkDestroyCommandPool(this->m_Logical_Device.get(), this->m_Command_Pool.get(), nullptr);
 		this->m_Command_Pool.reset();
 
-		for (auto& Framebuffer : this->m_Swap_Chain_Frame_buffers) {
-			//vkDestroyFramebuffer(this->m_Logical_Device.get(), Framebuffer.get(), nullptr);
-			Framebuffer.reset();
-		}
+		//NOTE : In Clean Up Swap Chain Func
+		//for (auto& Framebuffer : this->m_Swap_Chain_Frame_buffers) {
+		//	//vkDestroyFramebuffer(this->m_Logical_Device.get(), Framebuffer.get(), nullptr);
+		//	Framebuffer.reset();
+		//}
 
 		//vkDestroyPipeline(this->m_Logical_Device.get(), this->m_Graphics_Pipeline.get(), nullptr);
 		this->m_Graphics_Pipeline.reset();
@@ -263,14 +284,16 @@ private:
 		//vkDestroyRenderPass(this->m_Logical_Device.get(), this->m_Render_Pass.get(), nullptr);
 		this->m_Render_Pass.reset();
 
-		for (auto& Image_View : this->m_Swap_Chain_Image_Views) {
-			//vkDestroyImageView(this->m_Logical_Device.get(), Image_View.get(), nullptr);
+		//NOTE : In Clean Up Swap Chain Func
+		//for (auto& Image_View : this->m_Swap_Chain_Image_Views) {
+		//	//vkDestroyImageView(this->m_Logical_Device.get(), Image_View.get(), nullptr);
 
-			Image_View.reset();
-		}
+		//	Image_View.reset();
+		//}
 
-		//vkDestroySwapchainKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), nullptr);
-		this->m_Swap_Chain.reset();
+		// NOTE : In Clean Up Swap Chain Func
+		////vkDestroySwapchainKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), nullptr);
+		//this->m_Swap_Chain.reset();
 
 		//vkDestroyDevice(this->m_Logical_Device.get(), nullptr);
 		this->m_Logical_Device.reset();
@@ -292,6 +315,24 @@ private:
 		glfwTerminate();
 	}
 
+	void Re_Create_SwapChain(void) {
+		int Width{ 0 }, Height{ 0 };
+		glfwGetFramebufferSize(this->m_Window.get(), &Width, &Height);
+		while (Width == 0 || Height == 0) {
+			glfwGetFramebufferSize(this->m_Window.get(), &Width, &Height);
+			glfwWaitEvents();
+		}
+
+		THROW_IF_VK_FAILED(vkDeviceWaitIdle(this->m_Logical_Device.get()));
+
+		this->CleanUp_SwapChain();
+
+		this->Create_SwapChain();
+		this->Create_SwapChhain_Image_Views();
+		this->Create_Frame_Buffers();
+	}
+
+private:
 	void Create_Instance(void) {
 		VkApplicationInfo VK_Application_Info{};
 		{
@@ -316,8 +357,8 @@ private:
 			Instance_Create_Info.ppEnabledLayerNames = this->m_Validation_Layer_List.data();
 #else
 			Instance_Create_Info.pNext = nullptr;
-			VK_Instance_Info.enabledLayerCount = 0;
-			VK_Instance_Info.ppEnabledLayerNames = nullptr;
+			Instance_Create_Info.enabledLayerCount = 0;
+			Instance_Create_Info.ppEnabledLayerNames = nullptr;
 #endif // _DEBUG
 			Instance_Create_Info.enabledExtensionCount = static_cast<uint32_t>(Extensions.size());
 			Instance_Create_Info.ppEnabledExtensionNames = Extensions.data();
@@ -326,21 +367,6 @@ private:
 		VkInstance VK_Instance{ nullptr };
 		THROW_IF_VK_FAILED(vkCreateInstance(&Instance_Create_Info, nullptr, &VK_Instance));
 		this->m_VK_Instance.reset(VK_Instance);
-	}
-
-private:
-	static vector<const char*> Get_Require_Extensions(void) {
-		uint32_t GLFW_Extension_Count;
-		const char** GLFW_Extensions;
-		GLFW_Extensions = glfwGetRequiredInstanceExtensions(&GLFW_Extension_Count);
-
-		vector<const char*> Extensions{ GLFW_Extensions, GLFW_Extensions + GLFW_Extension_Count };
-
-#ifdef _DEBUG
-		Extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#endif // _DEBUG
-
-		return Extensions;
 	}
 
 	void Create_Surface(void) {
@@ -480,7 +506,7 @@ private:
 		this->m_Swap_Chain_Extent = Swap_Chain_Extent;
 	}
 
-	void Create_SwapChhain_Image_View(void) {
+	void Create_SwapChhain_Image_Views(void) {
 
 		VkComponentMapping Component_Mapping{};
 		{
@@ -922,7 +948,12 @@ private:
 		THROW_IF_VK_FAILED(vkResetFences(this->m_Logical_Device.get(), 1, &Temp_INFlightFence));
 
 		uint32_t Image_Index{};
-		THROW_IF_VK_FAILED(vkAcquireNextImageKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), std::numeric_limits<uint64_t>::max(), this->m_Image_Available_Semaphores[this->m_Current_Frame].get(), VK_NULL_HANDLE, &Image_Index));
+		const VkResult Acquire_Flag{ vkAcquireNextImageKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), std::numeric_limits<uint64_t>::max(), this->m_Image_Available_Semaphores[this->m_Current_Frame].get(), VK_NULL_HANDLE, &Image_Index) };
+
+		if (VK_ERROR_OUT_OF_DATE_KHR == Acquire_Flag)
+			this->Re_Create_SwapChain();
+		else if (VK_SUCCESS != Acquire_Flag && VK_SUBOPTIMAL_KHR != Acquire_Flag)
+			throw runtime_error("Failed to acquire swap chain image!");
 
 		THROW_IF_VK_FAILED(vkResetCommandBuffer(this->m_Command_Buffers[this->m_Current_Frame], 0));
 		this->Record_Command_Buffer(this->m_Command_Buffers[this->m_Current_Frame], Image_Index);
@@ -958,7 +989,16 @@ private:
 			Present_Info.pResults = nullptr;
 		}
 
-		THROW_IF_VK_FAILED(vkQueuePresentKHR(this->m_Present_Queue, &Present_Info));
+		const VkResult Present_Flag{ vkQueuePresentKHR(this->m_Present_Queue, &Present_Info) };
+
+		if (VK_ERROR_OUT_OF_DATE_KHR == Present_Flag ||
+			VK_SUBOPTIMAL_KHR == Present_Flag ||
+			this->m_Frame_Buffer_Resized) {
+			this->m_Frame_Buffer_Resized = false;
+			this->Re_Create_SwapChain();
+		}
+		else if (VK_SUCCESS != Present_Flag && VK_SUBOPTIMAL_KHR != Present_Flag)
+			throw runtime_error("Failed to present swap chain image!");
 
 		this->m_Current_Frame = (this->m_Current_Frame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
@@ -1063,7 +1103,21 @@ private:
 			throw runtime_error("Failed to initialize GLFW");
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+		//glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	}
+
+	static vector<const char*> Get_Require_Extensions(void) {
+		uint32_t GLFW_Extension_Count;
+		const char** GLFW_Extensions;
+		GLFW_Extensions = glfwGetRequiredInstanceExtensions(&GLFW_Extension_Count);
+
+		vector<const char*> Extensions{ GLFW_Extensions, GLFW_Extensions + GLFW_Extension_Count };
+
+#ifdef _DEBUG
+		Extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif // _DEBUG
+
+		return Extensions;
 	}
 
 	static bool Check_Device_Extension_Support(VkPhysicalDevice Device) {
@@ -1114,6 +1168,11 @@ private:
 		return VK_PRESENT_MODE_FIFO_KHR;
 	}
 
+	static void Frame_Buffer_Resize_CallBack(GLFWwindow* Window, int Width, int Height) {
+		auto App = reinterpret_cast<VK_Application*>(glfwGetWindowUserPointer(Window));
+		App->m_Frame_Buffer_Resized = true;
+	}
+
 private:
 	unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> m_Window{ nullptr, glfwDestroyWindow };
 
@@ -1159,6 +1218,8 @@ private:
 	vector<unique_ptr<VkFence_T, function<void(VkFence)>>> m_InFlight_Fences{};
 
 	uint32_t m_Current_Frame{ 0 };
+
+	bool m_Frame_Buffer_Resized{ false };
 
 };
 
