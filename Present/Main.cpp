@@ -167,7 +167,6 @@ public:
 	}
 #endif // _DEBUG
 
-
 public:
 	VK_Application(void) = default;
 
