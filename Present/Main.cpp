@@ -13,6 +13,7 @@
 #include<algorithm>
 #include<filesystem>
 #include<fstream>
+#include<sstream>
 
 #include "vulkan/vulkan.h"
 
@@ -20,6 +21,29 @@
 #include "GLFW/glfw3.h"
 
 using namespace std;
+
+inline const char* vkResultToString(VkResult result) {
+	switch (result) {
+	case VK_SUCCESS: return "VK_SUCCESS";
+	case VK_NOT_READY: return "VK_NOT_READY";
+	case VK_TIMEOUT: return "VK_TIMEOUT";
+	case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
+	default: return "UNKNOWN_ERROR";
+	}
+}
+
+#define THROW_IF_VK_FAILED(VK_CALL)                                       \
+    do {                                                                      \
+        VkResult __result = (VK_CALL);                                        \
+        if (__result != VK_SUCCESS) {                                         \
+            std::ostringstream __oss;                                         \
+            __oss << "Vulkan error in " << __FILE__                           \
+                  << "(" << __LINE__ << "): " << #VK_CALL                     \
+                  << "\n  Code: " << vkResultToString(__result)				  \
+                  << " (" << static_cast<int>(__result) << ")";               \
+            throw std::runtime_error(__oss.str());                           \
+        }                                                                     \
+    } while (0)
 
 constexpr int WIDTH{ 800 };
 constexpr int HEIGHT{ 600 };
@@ -69,13 +93,14 @@ public:
 
 	VkDebugUtilsMessengerCreateInfoEXT m_VkDebugUtilsMessengerCreateInfoEXT{};
 
+	//TODO : TO Static Function
 	bool Check_Vaildation_Layer_Support(void) {
 		uint32_t Layer_Count;
-		vkEnumerateInstanceLayerProperties(&Layer_Count, nullptr);
+		THROW_IF_VK_FAILED(vkEnumerateInstanceLayerProperties(&Layer_Count, nullptr));
 
 		vector<VkLayerProperties> Available_Layers;
 		Available_Layers.resize(Layer_Count);
-		vkEnumerateInstanceLayerProperties(&Layer_Count, Available_Layers.data());
+		THROW_IF_VK_FAILED(vkEnumerateInstanceLayerProperties(&Layer_Count, Available_Layers.data()));
 
 		for (const auto& Layer_Name : this->m_Validation_Layer_List) {
 			bool layer_Is_Found = false;
@@ -118,7 +143,7 @@ public:
 		this->m_VkDebugUtilsMessengerCreateInfoEXT.pUserData = nullptr;
 	}
 
-	static VkResult Create_DebugUtils_Messenger_EXT(VkInstance Instance, const VkDebugUtilsMessengerCreateInfoEXT* Create_Info, const VkAllocationCallbacks* Allocator, VkDebugUtilsMessengerEXT* m_Debug_Messenger) {
+	static const VkResult Create_DebugUtils_Messenger_EXT(VkInstance Instance, const VkDebugUtilsMessengerCreateInfoEXT* Create_Info, const VkAllocationCallbacks* Allocator, VkDebugUtilsMessengerEXT* m_Debug_Messenger) {
 		auto Func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(Instance, "vkCreateDebugUtilsMessengerEXT"));
 		if (nullptr != Func)
 			return Func(Instance, Create_Info, Allocator, m_Debug_Messenger);
@@ -133,15 +158,15 @@ public:
 	}
 
 	void Set_Debug_Messenger() {
-		if (VK_SUCCESS != VK_Application::Create_DebugUtils_Messenger_EXT(
-			this->m_VK_Instance.get(), &
-			this->m_VkDebugUtilsMessengerCreateInfoEXT,
+		THROW_IF_VK_FAILED(VK_Application::Create_DebugUtils_Messenger_EXT(
+			this->m_VK_Instance.get(),
+			&this->m_VkDebugUtilsMessengerCreateInfoEXT,
 			nullptr,
 			&this->m_Debug_Messenger)
-			)
-			throw runtime_error("Failed to set up debug messenger!");
+		);
 	}
 #endif // _DEBUG
+
 
 public:
 	VK_Application(void) = default;
@@ -202,7 +227,7 @@ private:
 
 			this->Draw_Frame();
 		}
-		vkDeviceWaitIdle(this->m_Logical_Device.get());
+		THROW_IF_VK_FAILED(vkDeviceWaitIdle(this->m_Logical_Device.get()));
 	}
 
 	void CleanUp(void) {
@@ -268,7 +293,6 @@ private:
 		VkApplicationInfo VK_Application_Info{};
 		{
 			VK_Application_Info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-			VK_Application_Info.pNext = nullptr;
 			VK_Application_Info.pApplicationName = "Hello Triangle";
 			VK_Application_Info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 			VK_Application_Info.pEngineName = "No Engine";
@@ -277,29 +301,27 @@ private:
 		}
 
 		const auto& Extensions = VK_Application::Get_Require_Extensions();
-		VkInstanceCreateInfo VK_Instance_Info = {};
+		VkInstanceCreateInfo Instance_Create_Info = {};
 		{
-			VK_Instance_Info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+			Instance_Create_Info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 
-			VK_Instance_Info.pApplicationInfo = &VK_Application_Info;
+			Instance_Create_Info.pApplicationInfo = &VK_Application_Info;
 
 #ifdef _DEBUG
-			VK_Instance_Info.pNext = reinterpret_cast<const void*>(&this->m_VkDebugUtilsMessengerCreateInfoEXT);
-
-			VK_Instance_Info.enabledLayerCount = static_cast<uint32_t>(this->m_Validation_Layer_List.size());
-			VK_Instance_Info.ppEnabledLayerNames = this->m_Validation_Layer_List.data();
+			Instance_Create_Info.pNext = reinterpret_cast<const void*>(&this->m_VkDebugUtilsMessengerCreateInfoEXT);
+			Instance_Create_Info.enabledLayerCount = static_cast<uint32_t>(this->m_Validation_Layer_List.size());
+			Instance_Create_Info.ppEnabledLayerNames = this->m_Validation_Layer_List.data();
 #else
+			Instance_Create_Info.pNext = nullptr;
 			VK_Instance_Info.enabledLayerCount = 0;
 			VK_Instance_Info.ppEnabledLayerNames = nullptr;
 #endif // _DEBUG
-
-			VK_Instance_Info.enabledExtensionCount = static_cast<uint32_t>(Extensions.size());
-			VK_Instance_Info.ppEnabledExtensionNames = Extensions.data();
+			Instance_Create_Info.enabledExtensionCount = static_cast<uint32_t>(Extensions.size());
+			Instance_Create_Info.ppEnabledExtensionNames = Extensions.data();
 		}
 
 		VkInstance VK_Instance{ nullptr };
-		if (VK_SUCCESS != vkCreateInstance(&VK_Instance_Info, nullptr, &VK_Instance))
-			throw std::runtime_error("failed to create instance!");
+		THROW_IF_VK_FAILED(vkCreateInstance(&Instance_Create_Info, nullptr, &VK_Instance));
 		this->m_VK_Instance.reset(VK_Instance);
 	}
 
@@ -320,8 +342,8 @@ private:
 
 	void Create_Surface(void) {
 		VkSurfaceKHR Surface{ nullptr };
-		if (VK_SUCCESS != glfwCreateWindowSurface(this->m_VK_Instance.get(), this->m_Window.get(), nullptr, &Surface))
-			throw runtime_error("Failed to create window surface!");
+		THROW_IF_VK_FAILED(glfwCreateWindowSurface(this->m_VK_Instance.get(), this->m_Window.get(), nullptr, &Surface));
+
 
 		this->m_Surface.get_deleter() = [Instance = this->m_VK_Instance.get()](VkSurfaceKHR Surface) {vkDestroySurfaceKHR(Instance, Surface, nullptr); };
 		this->m_Surface.reset(Surface);
@@ -329,13 +351,14 @@ private:
 
 	void Pick_Physical_Device(void) {
 		uint32_t Device_Count{ 0 };
-		vkEnumeratePhysicalDevices(this->m_VK_Instance.get(), &Device_Count, nullptr);
+		THROW_IF_VK_FAILED(vkEnumeratePhysicalDevices(this->m_VK_Instance.get(), &Device_Count, nullptr));
+
 		if (0 == Device_Count)
 			throw runtime_error("Failed to find GPUs with Vulkan support!");
 
 		vector<VkPhysicalDevice> Devices{};
 		Devices.resize(Device_Count);
-		vkEnumeratePhysicalDevices(this->m_VK_Instance.get(), &Device_Count, Devices.data());
+		THROW_IF_VK_FAILED(vkEnumeratePhysicalDevices(this->m_VK_Instance.get(), &Device_Count, Devices.data()));
 		for (const auto& Device : Devices)
 			if (Is_Device_Suitable(Device)) {
 				this->m_Physical_Device = Device;
@@ -358,6 +381,7 @@ private:
 		if (numeric_limits<uint32_t>::max() == this->m_Queue_Family_Indices.Present_Family)
 			throw runtime_error("Failed to find a queue family with present bit!");
 
+		//NOTE : Queue Family Should Be Unique,Because It Maybe Same
 		unordered_set<uint32_t> Unique_Queue_Families{
 			this->m_Queue_Family_Indices.Graphics_Family,
 			this->m_Queue_Family_Indices.Present_Family
@@ -391,8 +415,7 @@ private:
 		}
 
 		VkDevice Logical_Device{ nullptr };
-		if (VK_SUCCESS != vkCreateDevice(this->m_Physical_Device, &Device_Create_Info, nullptr, &Logical_Device))
-			throw runtime_error("Failed to create logical device!");
+		THROW_IF_VK_FAILED(vkCreateDevice(this->m_Physical_Device, &Device_Create_Info, nullptr, &Logical_Device));
 		this->m_Logical_Device.reset(Logical_Device);
 
 		vkGetDeviceQueue(this->m_Logical_Device.get(), this->m_Queue_Family_Indices.Graphics_Family, 0, &this->m_Graphics_Queue);
@@ -405,22 +428,19 @@ private:
 		this->Query_Swap_Chain_Support_Details();
 
 		const VkSurfaceFormatKHR Surface_Format{ Choose_SwapChain_Surface_Format(this->m_Swap_Chain_Support_Details.Formats) };
-
 		const VkPresentModeKHR Present_Mode{ Choose_SwapChain_Present_Mode(this->m_Swap_Chain_Support_Details.Present_Modes) };
-
 		const VkExtent2D Swap_Chain_Extent{ Choose_SwapChain_Extent(this->m_Swap_Chain_Support_Details.Capabilities) };
 
 		//NOTE : Choose Image Count ,We Want One More Image Than Min Image Count
 		uint32_t Image_Count{ this->m_Swap_Chain_Support_Details.Capabilities.minImageCount + 1 };
 		Image_Count = std::clamp(Image_Count, this->m_Swap_Chain_Support_Details.Capabilities.minImageCount, this->m_Swap_Chain_Support_Details.Capabilities.maxImageCount);
 
-		vector<uint32_t> Queue_Family_Indices{ this->m_Queue_Family_Indices.Graphics_Family };
+		//TODO : Why We Need Graphics And Present Family
+		vector<uint32_t> Queue_Family_Indices{ this->m_Queue_Family_Indices.Graphics_Family,this->m_Queue_Family_Indices.Present_Family };
 		VkSharingMode Sharing_Mode{ VK_SHARING_MODE_EXCLUSIVE };
 
-		if (this->m_Queue_Family_Indices.Graphics_Family != this->m_Queue_Family_Indices.Present_Family) {
-			Queue_Family_Indices.emplace_back(this->m_Queue_Family_Indices.Present_Family);
+		if (this->m_Queue_Family_Indices.Graphics_Family != this->m_Queue_Family_Indices.Present_Family)
 			Sharing_Mode = VK_SHARING_MODE_CONCURRENT;
-		}
 
 		VkSwapchainCreateInfoKHR Swap_Chain_Create_Info{};
 		{
@@ -444,15 +464,14 @@ private:
 		}
 
 		VkSwapchainKHR Swap_Chain{ nullptr };
-		if (VK_SUCCESS != vkCreateSwapchainKHR(this->m_Logical_Device.get(), &Swap_Chain_Create_Info, nullptr, &Swap_Chain))
-			throw runtime_error("Failed to create swap chain!");
+		THROW_IF_VK_FAILED(vkCreateSwapchainKHR(this->m_Logical_Device.get(), &Swap_Chain_Create_Info, nullptr, &Swap_Chain));
 
 		this->m_Swap_Chain.get_deleter() = [Device = this->m_Logical_Device.get()](VkSwapchainKHR Swap_Chain) {vkDestroySwapchainKHR(Device, Swap_Chain, nullptr); };
 		this->m_Swap_Chain.reset(Swap_Chain);
 
-		vkGetSwapchainImagesKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), &Image_Count, nullptr);
+		THROW_IF_VK_FAILED(vkGetSwapchainImagesKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), &Image_Count, nullptr));
 		this->m_Swap_Chain_Images.resize(Image_Count);
-		vkGetSwapchainImagesKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), &Image_Count, this->m_Swap_Chain_Images.data());
+		THROW_IF_VK_FAILED(vkGetSwapchainImagesKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), &Image_Count, this->m_Swap_Chain_Images.data()));
 
 		this->m_Swap_Chain_Image_Format = Surface_Format.format;
 		this->m_Swap_Chain_Extent = Swap_Chain_Extent;
@@ -490,8 +509,8 @@ private:
 			}
 
 			VkImageView Image_View{ nullptr };
-			if (VK_SUCCESS != vkCreateImageView(this->m_Logical_Device.get(), &Image_View_Create_Info, nullptr, &Image_View))
-				throw runtime_error("Failed to create image views!");
+			THROW_IF_VK_FAILED(vkCreateImageView(this->m_Logical_Device.get(), &Image_View_Create_Info, nullptr, &Image_View));
+
 			this->m_Swap_Chain_Image_Views[Index].get_deleter() = [Device = this->m_Logical_Device.get()](VkImageView Image_View) {if (nullptr != Image_View) vkDestroyImageView(Device, Image_View, nullptr); };
 			this->m_Swap_Chain_Image_Views[Index].reset(Image_View);
 		}
@@ -546,8 +565,7 @@ private:
 		}
 
 		VkRenderPass Render_Pass{ nullptr };
-		if (VK_SUCCESS != vkCreateRenderPass(this->m_Logical_Device.get(), &Render_Pass_Create_Info, nullptr, &Render_Pass))
-			throw runtime_error("Failed to create render pass!");
+		THROW_IF_VK_FAILED(vkCreateRenderPass(this->m_Logical_Device.get(), &Render_Pass_Create_Info, nullptr, &Render_Pass));
 
 		this->m_Render_Pass.get_deleter() = [Device = this->m_Logical_Device.get()](VkRenderPass Render_Pass) {if (nullptr != Render_Pass) vkDestroyRenderPass(Device, Render_Pass, nullptr); };
 		this->m_Render_Pass.reset(Render_Pass);
@@ -612,11 +630,12 @@ private:
 
 		VkPipelineViewportStateCreateInfo Viewport_State_Info{};
 		{
+			//TODO : Ignore Some Field
 			Viewport_State_Info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 			Viewport_State_Info.viewportCount = 1;
-			Viewport_State_Info.pViewports = &Viewport;
+			//Viewport_State_Info.pViewports = &Viewport;
 			Viewport_State_Info.scissorCount = 1;
-			Viewport_State_Info.pScissors = &Scissor;
+			//Viewport_State_Info.pScissors = &Scissor;
 		}
 
 		VkPipelineRasterizationStateCreateInfo Rasterizer{};
@@ -639,7 +658,7 @@ private:
 			Multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 			Multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 			Multisampling.sampleShadingEnable = VK_FALSE;
-			Multisampling.minSampleShading = 1.0f;
+			Multisampling.minSampleShading = 0.f;
 			Multisampling.pSampleMask = nullptr;
 			Multisampling.alphaToCoverageEnable = VK_FALSE;
 			Multisampling.alphaToOneEnable = VK_FALSE;
@@ -649,13 +668,17 @@ private:
 		VkPipelineColorBlendAttachmentState Color_Blend_Attachment{};
 		{
 			Color_Blend_Attachment.blendEnable = VK_FALSE;
-			Color_Blend_Attachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+			Color_Blend_Attachment.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
 			Color_Blend_Attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
 			Color_Blend_Attachment.colorBlendOp = VK_BLEND_OP_ADD;
-			Color_Blend_Attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			Color_Blend_Attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 			Color_Blend_Attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 			Color_Blend_Attachment.alphaBlendOp = VK_BLEND_OP_ADD;
-			Color_Blend_Attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+			Color_Blend_Attachment.colorWriteMask =
+				VK_COLOR_COMPONENT_R_BIT |
+				VK_COLOR_COMPONENT_G_BIT |
+				VK_COLOR_COMPONENT_B_BIT |
+				VK_COLOR_COMPONENT_A_BIT;
 		}
 
 		VkPipelineColorBlendStateCreateInfo Color_Blending{};
@@ -695,8 +718,7 @@ private:
 		}
 
 		VkPipelineLayout Pipeline_Layout{ nullptr };
-		if (VK_SUCCESS != vkCreatePipelineLayout(this->m_Logical_Device.get(), &Pipeline_Layout_Info, nullptr, &Pipeline_Layout))
-			throw runtime_error("Failed to create pipeline layout!");
+		THROW_IF_VK_FAILED(vkCreatePipelineLayout(this->m_Logical_Device.get(), &Pipeline_Layout_Info, nullptr, &Pipeline_Layout));
 
 		this->m_Pipeline_Layout.get_deleter() = [Device = this->m_Logical_Device.get()](VkPipelineLayout Pipeline_Layout) {if (nullptr != Pipeline_Layout) vkDestroyPipelineLayout(Device, Pipeline_Layout, nullptr); };
 		this->m_Pipeline_Layout.reset(Pipeline_Layout);
@@ -726,8 +748,7 @@ private:
 		}
 
 		VkPipeline Graphics_Pipeline{ nullptr };
-		if (VK_SUCCESS != vkCreateGraphicsPipelines(this->m_Logical_Device.get(), VK_NULL_HANDLE, 1, &Pipeline_Info, nullptr, &Graphics_Pipeline))
-			throw runtime_error("Failed to create graphics pipeline!");
+		THROW_IF_VK_FAILED(vkCreateGraphicsPipelines(this->m_Logical_Device.get(), VK_NULL_HANDLE, 1, &Pipeline_Info, nullptr, &Graphics_Pipeline));
 
 		this->m_Graphics_Pipeline.get_deleter() = [Device = this->m_Logical_Device.get()](VkPipeline Graphics_Pipeline) {if (nullptr != Graphics_Pipeline) vkDestroyPipeline(Device, Graphics_Pipeline, nullptr); };
 		this->m_Graphics_Pipeline.reset(Graphics_Pipeline);
@@ -754,8 +775,7 @@ private:
 			}
 
 			VkFramebuffer Framebuffer{ nullptr };
-			if (VK_SUCCESS != vkCreateFramebuffer(this->m_Logical_Device.get(), &Framebuffer_Info, nullptr, &Framebuffer))
-				throw runtime_error("Failed to create framebuffer!");
+			THROW_IF_VK_FAILED(vkCreateFramebuffer(this->m_Logical_Device.get(), &Framebuffer_Info, nullptr, &Framebuffer));
 
 			this->m_Swap_Chain_Frame_buffers[Index].get_deleter() = [Device = this->m_Logical_Device.get()](VkFramebuffer Framebuffer) {if (nullptr != Framebuffer) vkDestroyFramebuffer(Device, Framebuffer, nullptr); };
 			this->m_Swap_Chain_Frame_buffers[Index].reset(Framebuffer);
@@ -771,8 +791,7 @@ private:
 		}
 
 		VkCommandPool Command_Pool{ nullptr };
-		if (VK_SUCCESS != vkCreateCommandPool(this->m_Logical_Device.get(), &Command_Pool_Info, nullptr, &Command_Pool))
-			throw runtime_error("Failed to create command pool!");
+		THROW_IF_VK_FAILED(vkCreateCommandPool(this->m_Logical_Device.get(), &Command_Pool_Info, nullptr, &Command_Pool));
 
 		this->m_Command_Pool.get_deleter() = [Device = this->m_Logical_Device.get()](VkCommandPool Command_Pool) {if (nullptr != Command_Pool) vkDestroyCommandPool(Device, Command_Pool, nullptr); };
 		this->m_Command_Pool.reset(Command_Pool);
@@ -787,8 +806,7 @@ private:
 			Command_Buffer_Allocate_Info.commandBufferCount = 1;
 		}
 
-		if (VK_SUCCESS != vkAllocateCommandBuffers(this->m_Logical_Device.get(), &Command_Buffer_Allocate_Info, &this->m_Command_Buffer))
-			throw runtime_error("Failed to allocate command buffers!");
+		THROW_IF_VK_FAILED(vkAllocateCommandBuffers(this->m_Logical_Device.get(), &Command_Buffer_Allocate_Info, &this->m_Command_Buffer));
 	}
 
 	void Record_Command_Buffer(VkCommandBuffer Command_Buffer, uint32_t Image_Index) {
@@ -861,14 +879,12 @@ private:
 
 		const auto  Deleter = [Device = this->m_Logical_Device.get()](VkSemaphore Semaphore) {if (nullptr != Semaphore) vkDestroySemaphore(Device, Semaphore, nullptr); };
 
-		if (VK_SUCCESS != vkCreateSemaphore(this->m_Logical_Device.get(), &Semaphore_Info, nullptr, &Semaphore))
-			throw runtime_error("Failed to create image available semaphore!");
+		THROW_IF_VK_FAILED(vkCreateSemaphore(this->m_Logical_Device.get(), &Semaphore_Info, nullptr, &Semaphore));
 
 		this->m_Image_Available_Semaphore.get_deleter() = Deleter;
 		this->m_Image_Available_Semaphore.reset(Semaphore);
 
-		if (VK_SUCCESS != vkCreateSemaphore(this->m_Logical_Device.get(), &Semaphore_Info, nullptr, &Semaphore))
-			throw runtime_error("Failed to create render finished semaphore!");
+		THROW_IF_VK_FAILED(vkCreateSemaphore(this->m_Logical_Device.get(), &Semaphore_Info, nullptr, &Semaphore));
 
 		this->m_Render_Finished_Semaphore.get_deleter() = Deleter;
 		this->m_Render_Finished_Semaphore.reset(Semaphore);
@@ -880,32 +896,27 @@ private:
 		}
 
 		VkFence InFlight_Fence{ nullptr };
-		if (VK_SUCCESS != vkCreateFence(this->m_Logical_Device.get(), &Fence_Info, nullptr, &InFlight_Fence))
-			throw runtime_error("Failed to create in flight fence!");
+		THROW_IF_VK_FAILED(vkCreateFence(this->m_Logical_Device.get(), &Fence_Info, nullptr, &InFlight_Fence));
 
 		this->m_InFlight_Fence.get_deleter() = [Device = this->m_Logical_Device.get()](VkFence Fence) {if (nullptr != Fence) vkDestroyFence(Device, Fence, nullptr); };
-
 		this->m_InFlight_Fence.reset(InFlight_Fence);
 	}
 
 	void Draw_Frame(void) {
-		const auto Temp_INFlightFence = this->m_InFlight_Fence.get();
-		
-		 vkWaitForFences(this->m_Logical_Device.get(), 1, &Temp_INFlightFence, VK_TRUE, std::numeric_limits<uint64_t>::max());
+		static const auto  Temp_INFlightFence = this->m_InFlight_Fence.get();
 
-		if (VK_SUCCESS != vkResetFences(this->m_Logical_Device.get(), 1, &Temp_INFlightFence))
-			throw runtime_error("Failed to reset in flight fence!");
+		THROW_IF_VK_FAILED(vkWaitForFences(this->m_Logical_Device.get(), 1, &Temp_INFlightFence, VK_TRUE, std::numeric_limits<uint64_t>::max()));
+		THROW_IF_VK_FAILED(vkResetFences(this->m_Logical_Device.get(), 1, &Temp_INFlightFence));
 
 		uint32_t Image_Index{};
+		THROW_IF_VK_FAILED(vkAcquireNextImageKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), std::numeric_limits<uint64_t>::max(), this->m_Image_Available_Semaphore.get(), VK_NULL_HANDLE, &Image_Index));
 
-		if (VK_SUCCESS != vkAcquireNextImageKHR(this->m_Logical_Device.get(), this->m_Swap_Chain.get(), std::numeric_limits<uint64_t>::max(), this->m_Image_Available_Semaphore.get(), VK_NULL_HANDLE, &Image_Index))
-			throw runtime_error("Failed to acquire swap chain image!");
-
-		vkResetCommandBuffer(this->m_Command_Buffer, 0);
+		THROW_IF_VK_FAILED(vkResetCommandBuffer(this->m_Command_Buffer, 0));
 		this->Record_Command_Buffer(this->m_Command_Buffer, Image_Index);
 
 		VkSemaphore Wait_Semaphores[] = { this->m_Image_Available_Semaphore.get() };
 		VkPipelineStageFlags Wait_Stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+		VkSemaphore Signal_Semaphores[] = { this->m_Render_Finished_Semaphore.get() };
 
 		VkSubmitInfo Submit_Info{};
 		{
@@ -915,12 +926,12 @@ private:
 			Submit_Info.pWaitDstStageMask = Wait_Stages;
 			Submit_Info.pCommandBuffers = &this->m_Command_Buffer;
 			Submit_Info.commandBufferCount = 1;
+			Submit_Info.signalSemaphoreCount = 1;
+			Submit_Info.pSignalSemaphores = Signal_Semaphores;
 		}
 
-		if (VK_SUCCESS != vkQueueSubmit(this->m_Graphics_Queue, 1, &Submit_Info, this->m_InFlight_Fence.get()))
-			throw runtime_error("Failed to submit draw command buffer!");
+		THROW_IF_VK_FAILED(vkQueueSubmit(this->m_Graphics_Queue, 1, &Submit_Info, this->m_InFlight_Fence.get()));
 
-		VkSemaphore Signal_Semaphores[] = { this->m_Render_Finished_Semaphore.get() };
 		VkSwapchainKHR Swap_Chains[] = { this->m_Swap_Chain.get() };
 
 		VkPresentInfoKHR Present_Info{};
@@ -934,8 +945,7 @@ private:
 			Present_Info.pResults = nullptr;
 		}
 
-		if (VK_SUCCESS != vkQueuePresentKHR(this->m_Present_Queue, &Present_Info))
-			throw runtime_error("Failed to present swap chain image!");
+		THROW_IF_VK_FAILED(vkQueuePresentKHR(this->m_Present_Queue, &Present_Info));
 	}
 
 private:
@@ -967,7 +977,7 @@ private:
 		uint32_t Queue_Family_Index{ numeric_limits<uint32_t>::max() };
 		for (auto CIt = Queue_Families.cbegin(); CIt != Queue_Families.cend(); ++CIt) {
 			VkBool32 Present_Support{ false };
-			vkGetPhysicalDeviceSurfaceSupportKHR(this->m_Physical_Device, static_cast<uint32_t>(CIt - Queue_Families.cbegin()), this->m_Surface.get(), &Present_Support);
+			THROW_IF_VK_FAILED(vkGetPhysicalDeviceSurfaceSupportKHR(this->m_Physical_Device, static_cast<uint32_t>(CIt - Queue_Families.cbegin()), this->m_Surface.get(), &Present_Support));
 
 			if (Present_Support) {
 				Queue_Family_Index = static_cast<uint32_t>(CIt - Queue_Families.cbegin());
@@ -982,23 +992,23 @@ private:
 	}
 
 	void Query_Swap_Chain_Support_Details(void) {
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(this->m_Physical_Device, this->m_Surface.get(), &this->m_Swap_Chain_Support_Details.Capabilities);
+		THROW_IF_VK_FAILED(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(this->m_Physical_Device, this->m_Surface.get(), &this->m_Swap_Chain_Support_Details.Capabilities));
 
-		uint32_t Format_Count;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(this->m_Physical_Device, this->m_Surface.get(), &Format_Count, nullptr);
+		uint32_t Format_Count{};
+		THROW_IF_VK_FAILED(vkGetPhysicalDeviceSurfaceFormatsKHR(this->m_Physical_Device, this->m_Surface.get(), &Format_Count, nullptr));
 
 		if (0 != Format_Count) {
 			this->m_Swap_Chain_Support_Details.Formats.resize(Format_Count);
-			vkGetPhysicalDeviceSurfaceFormatsKHR(this->m_Physical_Device, this->m_Surface.get(), &Format_Count, this->m_Swap_Chain_Support_Details.Formats.data());
+			THROW_IF_VK_FAILED(vkGetPhysicalDeviceSurfaceFormatsKHR(this->m_Physical_Device, this->m_Surface.get(), &Format_Count, this->m_Swap_Chain_Support_Details.Formats.data()));
 		}
 		else
 			throw runtime_error("Failed to find a suitable GPU!");
 
-		uint32_t Present_Mode_Count;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(this->m_Physical_Device, this->m_Surface.get(), &Present_Mode_Count, nullptr);
+		uint32_t Present_Mode_Count{};
+		(vkGetPhysicalDeviceSurfacePresentModesKHR(this->m_Physical_Device, this->m_Surface.get(), &Present_Mode_Count, nullptr));
 		if (0 != Present_Mode_Count) {
 			this->m_Swap_Chain_Support_Details.Present_Modes.resize(Present_Mode_Count);
-			vkGetPhysicalDeviceSurfacePresentModesKHR(this->m_Physical_Device, this->m_Surface.get(), &Present_Mode_Count, this->m_Swap_Chain_Support_Details.Present_Modes.data());
+			THROW_IF_VK_FAILED(vkGetPhysicalDeviceSurfacePresentModesKHR(this->m_Physical_Device, this->m_Surface.get(), &Present_Mode_Count, this->m_Swap_Chain_Support_Details.Present_Modes.data()));
 		}
 		else
 			throw runtime_error("Failed to find a suitable GPU!");
@@ -1028,11 +1038,8 @@ private:
 		}
 
 		VkShaderModule Shader_Module{ nullptr };
-		if (VK_SUCCESS != vkCreateShaderModule(this->m_Logical_Device.get(), &Create_Info, nullptr, &Shader_Module))
-			throw runtime_error("Failed to create shader module!");
-
+		THROW_IF_VK_FAILED(vkCreateShaderModule(this->m_Logical_Device.get(), &Create_Info, nullptr, &Shader_Module));
 		return Shader_Module;
-
 	}
 
 private:
@@ -1044,18 +1051,33 @@ private:
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 	}
 
+	static bool Check_Device_Extension_Support(VkPhysicalDevice Device) {
+		uint32_t Extension_Count;
+		THROW_IF_VK_FAILED(vkEnumerateDeviceExtensionProperties(Device, nullptr, &Extension_Count, nullptr));
+		vector<VkExtensionProperties> Available_Extensions;
+		Available_Extensions.resize(Extension_Count);
+		THROW_IF_VK_FAILED(vkEnumerateDeviceExtensionProperties(Device, nullptr, &Extension_Count, Available_Extensions.data()));
+
+		unordered_set<string> Required_Extensions{ Device_EXT_SwapChain };
+		for (const auto& Available_Extension : Available_Extensions)
+			Required_Extensions.erase(Available_Extension.extensionName);
+
+		return Required_Extensions.empty();
+	}
+
 	static bool Is_Device_Suitable(VkPhysicalDevice Device) {
 		if (!VK_Application::Check_Device_Extension_Support(Device))
 			return false;
 
-		VkPhysicalDeviceProperties Device_Properties;
+		VkPhysicalDeviceProperties Device_Properties{};
 		vkGetPhysicalDeviceProperties(Device, &Device_Properties);
 
-		VkPhysicalDeviceFeatures Device_Features;
+		VkPhysicalDeviceFeatures Device_Features{};
 		vkGetPhysicalDeviceFeatures(Device, &Device_Features);
 
 		//NOTE : Use This For Check Device Type
-		return Device_Properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+		return
+			Device_Properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
 			Device_Features.geometryShader;
 	}
 
@@ -1075,20 +1097,6 @@ private:
 
 		//NOTE : Default Return FIFO ,If Device Suppert Present Queue ,IT Must Support FIFO
 		return VK_PRESENT_MODE_FIFO_KHR;
-	}
-
-	static bool Check_Device_Extension_Support(VkPhysicalDevice Device) {
-		uint32_t Extension_Count;
-		vkEnumerateDeviceExtensionProperties(Device, nullptr, &Extension_Count, nullptr);
-		vector<VkExtensionProperties> Available_Extensions;
-		Available_Extensions.resize(Extension_Count);
-		vkEnumerateDeviceExtensionProperties(Device, nullptr, &Extension_Count, Available_Extensions.data());
-
-		unordered_set<string> Required_Extensions{ Device_EXT_SwapChain };
-		for (const auto& Available_Extension : Available_Extensions)
-			Required_Extensions.erase(Available_Extension.extensionName);
-
-		return Required_Extensions.empty();
 	}
 
 private:
