@@ -283,6 +283,8 @@ private:
 		this->Create_Vertex_Buffer();
 		this->Create_Index_Buffer();
 		this->Create_Uniform_Buffers();
+		this->Create_Descriptor_Pool();
+		this->Create_Descriptor_Sets();
 		this->Create_Command_Buffers();
 		this->Create_Sync_Objects();
 	}
@@ -328,6 +330,8 @@ private:
 			this->m_InFlight_Fences[Index].reset();
 		}
 
+		//vkDestroyDescriptorPool(this->m_Logical_Device.get(), this->m_Descriptor_Pool.get(), nullptr);
+		this->m_Descriptor_Pool.reset();
 
 		for (size_t Index = 0; Index < MAX_FRAMES_IN_FLIGHT; ++Index) {
 			//vkDestroyBuffer(this->m_Logical_Device.get(), this->m_Uniform_Buffers[Index].get(), nullptr);
@@ -788,7 +792,7 @@ private:
 			Rasterizer.rasterizerDiscardEnable = VK_FALSE;
 			Rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 			Rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-			Rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+			Rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 			Rasterizer.depthBiasEnable = VK_FALSE;
 			Rasterizer.depthBiasConstantFactor = 0.0f;
 			Rasterizer.depthBiasClamp = 0.0f;
@@ -1039,6 +1043,68 @@ private:
 		}
 	}
 
+	void Create_Descriptor_Pool(void) {
+		VkDescriptorPoolSize Pool_Size{};
+		{
+			Pool_Size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			Pool_Size.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		}
+
+		VkDescriptorPoolCreateInfo Pool_Info{};
+		{
+			Pool_Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+			Pool_Info.poolSizeCount = 1;
+			Pool_Info.pPoolSizes = &Pool_Size;
+			Pool_Info.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		}
+
+		VkDescriptorPool Descriptor_Pool{ nullptr };
+		THROW_IF_VK_FAILED(vkCreateDescriptorPool(this->m_Logical_Device.get(), &Pool_Info, nullptr, &Descriptor_Pool));
+
+		this->m_Descriptor_Pool.get_deleter() = [Device = this->m_Logical_Device.get()](VkDescriptorPool Descriptor_Pool) {if (nullptr != Descriptor_Pool) vkDestroyDescriptorPool(Device, Descriptor_Pool, nullptr); };
+		this->m_Descriptor_Pool.reset(Descriptor_Pool);
+	}
+
+	void Create_Descriptor_Sets(void) {
+		vector<VkDescriptorSetLayout> Layouts(MAX_FRAMES_IN_FLIGHT, this->m_Descriptor_Set_Layout.get());
+
+		VkDescriptorSetAllocateInfo Allocate_Info{};
+		{
+			Allocate_Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			Allocate_Info.descriptorPool = this->m_Descriptor_Pool.get();
+			Allocate_Info.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+			Allocate_Info.pSetLayouts = Layouts.data();
+		}
+
+		this->m_Descriptor_Sets.resize(MAX_FRAMES_IN_FLIGHT);
+		THROW_IF_VK_FAILED(vkAllocateDescriptorSets(this->m_Logical_Device.get(), &Allocate_Info, this->m_Descriptor_Sets.data()));
+
+		for (size_t Index = 0; Index < MAX_FRAMES_IN_FLIGHT; ++Index) {
+			VkDescriptorBufferInfo Buffer_Info{};
+			{
+				Buffer_Info.buffer = this->m_Uniform_Buffers[Index].get();
+				Buffer_Info.offset = 0;
+				Buffer_Info.range = sizeof(Uniform_Buffer_Object);
+			}
+
+			VkWriteDescriptorSet Descriptor_Write{};
+			{
+				Descriptor_Write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				Descriptor_Write.dstSet = this->m_Descriptor_Sets[Index];
+				Descriptor_Write.dstBinding = 0;
+				Descriptor_Write.dstArrayElement = 0;
+				Descriptor_Write.descriptorCount = 1;
+				Descriptor_Write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				Descriptor_Write.pImageInfo = nullptr;
+				Descriptor_Write.pBufferInfo = &Buffer_Info;
+				Descriptor_Write.pTexelBufferView = nullptr;
+			}
+
+			vkUpdateDescriptorSets(this->m_Logical_Device.get(), 1, &Descriptor_Write, 0, nullptr);
+		}
+
+	}
+
 	void Record_Command_Buffer(VkCommandBuffer Command_Buffer, uint32_t Image_Index) {
 
 		VkCommandBufferBeginInfo Command_Buffer_Begin_Info{};
@@ -1099,6 +1165,8 @@ private:
 
 		//TODO Add Descripation Set 
 		//vkCmdBindDescriptorSets(Command_Buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->m_Pipeline_Layout.get(), 0, 1, &this->m_Descriptor_Sets[this->m_Current_Frame].get(), 0, nullptr);
+
+		vkCmdBindDescriptorSets(Command_Buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->m_Pipeline_Layout.get(), 0, 1, &this->m_Descriptor_Sets[this->m_Current_Frame], 0, nullptr);
 
 		vkCmdDrawIndexed(Command_Buffer, static_cast<uint32_t>(Indices.size()), 1, 0, 0, 0);
 
@@ -1534,6 +1602,9 @@ private:
 	vector<unique_ptr<VkBuffer_T, function<void(VkBuffer)>>> m_Uniform_Buffers{};
 	vector<unique_ptr<VkDeviceMemory_T, function<void(VkDeviceMemory)>>> m_Uniform_Buffers_Memory{};
 	vector<void*> Uniform_Buffers_Mapped{};
+
+	unique_ptr<VkDescriptorPool_T, function<void(VkDescriptorPool)>> m_Descriptor_Pool{ nullptr };
+	vector<VkDescriptorSet> m_Descriptor_Sets{};
 
 	vector<VkCommandBuffer> m_Command_Buffers{};
 
