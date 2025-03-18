@@ -882,45 +882,104 @@ private:
 		this->m_Command_Pool.reset(Command_Pool);
 	}
 
+	void Copy_Buffer(VkBuffer Source_Buffer, VkBuffer Destination_Buffer, VkDeviceSize Size) {
+		VkCommandBufferAllocateInfo Allocate_Info{};
+		{
+			Allocate_Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+			Allocate_Info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+			Allocate_Info.commandPool = this->m_Command_Pool.get();
+			Allocate_Info.commandBufferCount = 1;
+		}
+
+		VkCommandBuffer Command_Buffer{ nullptr };
+		THROW_IF_VK_FAILED(vkAllocateCommandBuffers(this->m_Logical_Device.get(), &Allocate_Info, &Command_Buffer));
+
+		VkCommandBufferBeginInfo Begin_Info{};
+		{
+			Begin_Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			Begin_Info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		}
+
+		THROW_IF_VK_FAILED(vkBeginCommandBuffer(Command_Buffer, &Begin_Info));
+
+		VkBufferCopy Copy_Region{};
+		{
+			Copy_Region.srcOffset = 0;
+			Copy_Region.dstOffset = 0;
+			Copy_Region.size = Size;
+		}
+
+		vkCmdCopyBuffer(Command_Buffer, Source_Buffer, Destination_Buffer, 1, &Copy_Region);
+
+		THROW_IF_VK_FAILED(vkEndCommandBuffer(Command_Buffer));
+
+		VkSubmitInfo Submit_Info{};
+		{
+			Submit_Info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			Submit_Info.commandBufferCount = 1;
+			Submit_Info.pCommandBuffers = &Command_Buffer;
+		}
+
+		THROW_IF_VK_FAILED(vkQueueSubmit(this->m_Graphics_Queue, 1, &Submit_Info, VK_NULL_HANDLE));
+
+		THROW_IF_VK_FAILED(vkQueueWaitIdle(this->m_Graphics_Queue));
+
+		vkFreeCommandBuffers(this->m_Logical_Device.get(), this->m_Command_Pool.get(), 1, &Command_Buffer);
+	}
+
 	void Create_Vertex_Buffer(void) {
+		VkDeviceSize Buffer_Size = sizeof(Vertex) * Vertices.size();
+
+		VkBuffer Staging_Buffer{ nullptr };
+		VkDeviceMemory Staging_Buffer_Memory{ nullptr };
+		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, Staging_Buffer, Staging_Buffer_Memory);
+
+		void* Data{ nullptr };
+		THROW_IF_VK_FAILED(vkMapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, 0, Buffer_Size, 0, &Data));
+		memcpy(Data, Vertices.data(), static_cast<size_t>(Buffer_Size));
+		vkUnmapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory);
+
+		VkBuffer Vertex_Buffer{ nullptr };
+		VkDeviceMemory Vertex_Buffer_Memory{ nullptr };
+
+		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Vertex_Buffer, Vertex_Buffer_Memory);
+
+		this->m_Vertex_Buffer.get_deleter() = [Device = this->m_Logical_Device.get()](VkBuffer Vertex_Buffer) {if (nullptr != Vertex_Buffer) vkDestroyBuffer(Device, Vertex_Buffer, nullptr); };
+		this->m_Vertex_Buffer.reset(Vertex_Buffer);
+
+		this->m_Vertex_Buffer_Memory.get_deleter() = [Device = this->m_Logical_Device.get()](VkDeviceMemory Vertex_Buffer_Memory) {if (nullptr != Vertex_Buffer_Memory) vkFreeMemory(Device, Vertex_Buffer_Memory, nullptr); };
+		this->m_Vertex_Buffer_Memory.reset(Vertex_Buffer_Memory);
+
+		this->Copy_Buffer(Staging_Buffer, this->m_Vertex_Buffer.get(), Buffer_Size);
+
+		vkDestroyBuffer(this->m_Logical_Device.get(), Staging_Buffer, nullptr);
+		vkFreeMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, nullptr);
+	}
+
+	void Create_Buffer(VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryPropertyFlags Properties, VkBuffer& Buffer, VkDeviceMemory& Buffer_Memory) {
 		VkBufferCreateInfo Buffer_Info{};
 		{
 			Buffer_Info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			Buffer_Info.size = static_cast<VkDeviceSize>(sizeof(Vertex) * Vertices.size());
-			Buffer_Info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+			Buffer_Info.size = Size;
+			Buffer_Info.usage = Usage;
 			Buffer_Info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		}
 
-		VkBuffer Vertex_Buffer{ nullptr };
-		THROW_IF_VK_FAILED(vkCreateBuffer(this->m_Logical_Device.get(), &Buffer_Info, nullptr, &Vertex_Buffer));
-
-		const auto Delete_Buffer = [Device = this->m_Logical_Device.get()](VkBuffer Buffer) {if (nullptr != Buffer) vkDestroyBuffer(Device, Buffer, nullptr); };
-		this->m_Vertex_Buffer.get_deleter() = Delete_Buffer;
-		this->m_Vertex_Buffer.reset(Vertex_Buffer);
+		THROW_IF_VK_FAILED(vkCreateBuffer(this->m_Logical_Device.get(), &Buffer_Info, nullptr, &Buffer));
 
 		VkMemoryRequirements Memory_Requirements{};
-		vkGetBufferMemoryRequirements(this->m_Logical_Device.get(), this->m_Vertex_Buffer.get(), &Memory_Requirements);
+		vkGetBufferMemoryRequirements(this->m_Logical_Device.get(), Buffer, &Memory_Requirements);
 
 		VkMemoryAllocateInfo Memory_Allocate_Info{};
 		{
 			Memory_Allocate_Info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 			Memory_Allocate_Info.allocationSize = Memory_Requirements.size;
-			Memory_Allocate_Info.memoryTypeIndex = this->Find_Memory_Type(Memory_Requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			Memory_Allocate_Info.memoryTypeIndex = this->Find_Memory_Type(Memory_Requirements.memoryTypeBits, Properties);
 		}
 
-		VkDeviceMemory Vertex_Buffer_Memory{ nullptr };
-		THROW_IF_VK_FAILED(vkAllocateMemory(this->m_Logical_Device.get(), &Memory_Allocate_Info, nullptr, &Vertex_Buffer_Memory));
+		THROW_IF_VK_FAILED(vkAllocateMemory(this->m_Logical_Device.get(), &Memory_Allocate_Info, nullptr, &Buffer_Memory));
 
-		this->m_Vertex_Buffer_Memory.get_deleter() = [Device = this->m_Logical_Device.get()](VkDeviceMemory Memory) {if (nullptr != Memory) vkFreeMemory(Device, Memory, nullptr); };
-		this->m_Vertex_Buffer_Memory.reset(Vertex_Buffer_Memory);
-
-		THROW_IF_VK_FAILED(vkBindBufferMemory(this->m_Logical_Device.get(), this->m_Vertex_Buffer.get(), this->m_Vertex_Buffer_Memory.get(), 0));
-
-		//NOTE : Buffer_Info.size Requal Vertices Size
-		void* Data{ nullptr };
-		THROW_IF_VK_FAILED(vkMapMemory(this->m_Logical_Device.get(), this->m_Vertex_Buffer_Memory.get(), 0, Buffer_Info.size, 0, &Data));
-		memcpy(Data, Vertices.data(), static_cast<size_t>(Buffer_Info.size));
-		vkUnmapMemory(this->m_Logical_Device.get(), this->m_Vertex_Buffer_Memory.get());
+		THROW_IF_VK_FAILED(vkBindBufferMemory(this->m_Logical_Device.get(), Buffer, Buffer_Memory, 0));
 	}
 
 	void Create_Command_Buffers(void) {
