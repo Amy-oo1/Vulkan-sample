@@ -14,11 +14,15 @@
 #include<filesystem>
 #include<fstream>
 #include<sstream>
+#include<array>
+#include<cstddef>
 
 #include "vulkan/vulkan.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include "GLFW/glfw3.h"
+
+#include "glm/glm.hpp"
 
 using namespace std;
 
@@ -56,6 +60,46 @@ const constexpr char* Device_EXT_SwapChain{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 const constexpr char* Vertex_Shader_File_Path{ "shaders/vshader.spv" };
 const constexpr char* Fragment_Shader_File_Path{ "shaders/fshader.spv" };
+
+struct Vertex final {
+	glm::vec2 Pos;
+	glm::vec3 Color;
+
+	static const VkVertexInputBindingDescription Get_Binding_Description(void) {
+		VkVertexInputBindingDescription Binding_Description{};
+		{
+			Binding_Description.binding = 0;
+			Binding_Description.stride = sizeof(Vertex);
+			Binding_Description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		}
+
+		return Binding_Description;
+	}
+
+	static const std::array<VkVertexInputAttributeDescription, 2> Get_Attribute_Descriptions(void) {
+		std::array<VkVertexInputAttributeDescription, 2> Attribute_Descriptions{};
+		{
+			Attribute_Descriptions[0].binding = 0;
+			Attribute_Descriptions[0].location = 0;
+			Attribute_Descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+			Attribute_Descriptions[0].offset = offsetof(Vertex, Pos);
+		}
+		{
+			Attribute_Descriptions[1].binding = 0;
+			Attribute_Descriptions[1].location = 1;
+			Attribute_Descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			Attribute_Descriptions[1].offset = offsetof(Vertex, Color);
+		}
+
+		return Attribute_Descriptions;
+	}
+};
+
+const std::vector<Vertex> vertices = {
+	{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+	{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+};
 
 static const std::vector<char> Read_File(const std::filesystem::path& File_Path) {
 	ifstream File{ File_Path, ios::ate | ios::binary };
@@ -625,13 +669,17 @@ private:
 			Fragment_Shader_Stage_Info.pSpecializationInfo = nullptr;
 		}
 
+		const auto& Binding_Description = Vertex::Get_Binding_Description();
+
+		const auto& Attribute_Descriptions = Vertex::Get_Attribute_Descriptions();
+
 		VkPipelineVertexInputStateCreateInfo Vertex_Input_Info{};
 		{
 			Vertex_Input_Info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-			Vertex_Input_Info.vertexBindingDescriptionCount = 0;
-			Vertex_Input_Info.pVertexBindingDescriptions = nullptr;
-			Vertex_Input_Info.vertexAttributeDescriptionCount = 0;
-			Vertex_Input_Info.pVertexAttributeDescriptions = nullptr;
+			Vertex_Input_Info.vertexBindingDescriptionCount = 1;
+			Vertex_Input_Info.pVertexBindingDescriptions = &Binding_Description;
+			Vertex_Input_Info.vertexAttributeDescriptionCount = static_cast<uint32_t>(Attribute_Descriptions.size());
+			Vertex_Input_Info.pVertexAttributeDescriptions = Attribute_Descriptions.data();
 		}
 
 		VkPipelineInputAssemblyStateCreateInfo Input_Assembly_Info{};
