@@ -35,6 +35,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Present", "Present\Present.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "frames", "frames\frames.vcxproj", "{99607FAE-993A-4A45-B3CD-CCF53B3AB70B}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "swapchain_recreation", "swapchain_recreation\swapchain_recreation.vcxproj", "{A2BEDE5C-D72C-415A-B120-4A69C8751625}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -171,6 +173,14 @@ Global
 		{99607FAE-993A-4A45-B3CD-CCF53B3AB70B}.Release|x64.Build.0 = Release|x64
 		{99607FAE-993A-4A45-B3CD-CCF53B3AB70B}.Release|x86.ActiveCfg = Release|Win32
 		{99607FAE-993A-4A45-B3CD-CCF53B3AB70B}.Release|x86.Build.0 = Release|Win32
+		{A2BEDE5C-D72C-415A-B120-4A69C8751625}.Debug|x64.ActiveCfg = Debug|x64
+		{A2BEDE5C-D72C-415A-B120-4A69C8751625}.Debug|x64.Build.0 = Debug|x64
+		{A2BEDE5C-D72C-415A-B120-4A69C8751625}.Debug|x86.ActiveCfg = Debug|Win32
+		{A2BEDE5C-D72C-415A-B120-4A69C8751625}.Debug|x86.Build.0 = Debug|Win32
+		{A2BEDE5C-D72C-415A-B120-4A69C8751625}.Release|x64.ActiveCfg = Release|x64
+		{A2BEDE5C-D72C-415A-B120-4A69C8751625}.Release|x64.Build.0 = Release|x64
+		{A2BEDE5C-D72C-415A-B120-4A69C8751625}.Release|x86.ActiveCfg = Release|Win32
+		{A2BEDE5C-D72C-415A-B120-4A69C8751625}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
