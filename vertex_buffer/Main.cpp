@@ -95,7 +95,7 @@ struct Vertex final {
 	}
 };
 
-const std::vector<Vertex> vertices = {
+const std::vector<Vertex> Vertices = {
 	{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
 	{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
 	{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
@@ -265,6 +265,7 @@ private:
 		this->Create_GraphicsPipeline();
 		this->Create_Frame_Buffers();
 		this->Create_Command_Pool();
+		this->Create_Vertex_Buffer();
 		this->Create_Command_Buffers();
 		this->Create_Sync_Objects();
 	}
@@ -298,6 +299,7 @@ private:
 
 		this->CleanUp_SwapChain();
 
+
 		for (size_t Index = 0; Index < MAX_FRAMES_IN_FLIGHT; ++Index) {
 			//vkDestroySemaphore(this->m_Logical_Device.get(), this->m_Render_Finished_Semaphores[Index].get(), nullptr);
 			this->m_Render_Finished_Semaphores[Index].reset();
@@ -308,6 +310,12 @@ private:
 			//vkDestroyFence(this->m_Logical_Device.get(), this->m_InFlight_Fences[Index].get(), nullptr);
 			this->m_InFlight_Fences[Index].reset();
 		}
+
+		//vkDestroyBuffer(this->m_Logical_Device.get(), this->m_Vertex_Buffer.get(), nullptr);
+		this->m_Vertex_Buffer.reset();
+
+		//vkFreeMemory(this->m_Logical_Device.get(), this->m_Vertex_Buffer_Memory.get(), nullptr);
+		this->m_Vertex_Buffer_Memory.reset();
 
 		//vkDestroyCommandPool(this->m_Logical_Device.get(), this->m_Command_Pool.get(), nullptr);
 		this->m_Command_Pool.reset();
@@ -874,6 +882,47 @@ private:
 		this->m_Command_Pool.reset(Command_Pool);
 	}
 
+	void Create_Vertex_Buffer(void) {
+		VkBufferCreateInfo Buffer_Info{};
+		{
+			Buffer_Info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			Buffer_Info.size = static_cast<VkDeviceSize>(sizeof(Vertex) * Vertices.size());
+			Buffer_Info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+			Buffer_Info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		}
+
+		VkBuffer Vertex_Buffer{ nullptr };
+		THROW_IF_VK_FAILED(vkCreateBuffer(this->m_Logical_Device.get(), &Buffer_Info, nullptr, &Vertex_Buffer));
+
+		const auto Delete_Buffer = [Device = this->m_Logical_Device.get()](VkBuffer Buffer) {if (nullptr != Buffer) vkDestroyBuffer(Device, Buffer, nullptr); };
+		this->m_Vertex_Buffer.get_deleter() = Delete_Buffer;
+		this->m_Vertex_Buffer.reset(Vertex_Buffer);
+
+		VkMemoryRequirements Memory_Requirements{};
+		vkGetBufferMemoryRequirements(this->m_Logical_Device.get(), this->m_Vertex_Buffer.get(), &Memory_Requirements);
+
+		VkMemoryAllocateInfo Memory_Allocate_Info{};
+		{
+			Memory_Allocate_Info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			Memory_Allocate_Info.allocationSize = Memory_Requirements.size;
+			Memory_Allocate_Info.memoryTypeIndex = this->Find_Memory_Type(Memory_Requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		}
+
+		VkDeviceMemory Vertex_Buffer_Memory{ nullptr };
+		THROW_IF_VK_FAILED(vkAllocateMemory(this->m_Logical_Device.get(), &Memory_Allocate_Info, nullptr, &Vertex_Buffer_Memory));
+
+		this->m_Vertex_Buffer_Memory.get_deleter() = [Device = this->m_Logical_Device.get()](VkDeviceMemory Memory) {if (nullptr != Memory) vkFreeMemory(Device, Memory, nullptr); };
+		this->m_Vertex_Buffer_Memory.reset(Vertex_Buffer_Memory);
+
+		THROW_IF_VK_FAILED(vkBindBufferMemory(this->m_Logical_Device.get(), this->m_Vertex_Buffer.get(), this->m_Vertex_Buffer_Memory.get(), 0));
+
+		//NOTE : Buffer_Info.size Requal Vertices Size
+		void* Data{ nullptr };
+		THROW_IF_VK_FAILED(vkMapMemory(this->m_Logical_Device.get(), this->m_Vertex_Buffer_Memory.get(), 0, Buffer_Info.size, 0, &Data));
+		memcpy(Data, Vertices.data(), static_cast<size_t>(Buffer_Info.size));
+		vkUnmapMemory(this->m_Logical_Device.get(), this->m_Vertex_Buffer_Memory.get());
+	}
+
 	void Create_Command_Buffers(void) {
 		this->m_Command_Buffers.resize(MAX_FRAMES_IN_FLIGHT);
 
@@ -940,7 +989,11 @@ private:
 		vkCmdSetViewport(Command_Buffer, 0, 1, &Viewport);
 		vkCmdSetScissor(Command_Buffer, 0, 1, &Scissor);
 
-		vkCmdDraw(Command_Buffer, 3, 1, 0, 0);
+		VkBuffer Vertex_Buffers[] = { this->m_Vertex_Buffer.get() };
+		VkDeviceSize Offsets[] = { 0 };
+		vkCmdBindVertexBuffers(Command_Buffer, 0, 1, Vertex_Buffers, Offsets);
+
+		vkCmdDraw(Command_Buffer, static_cast<uint32_t>(Vertices.size()), 1, 0, 0);
 
 		vkCmdEndRenderPass(Command_Buffer);
 
@@ -1145,6 +1198,19 @@ private:
 		return Shader_Module;
 	}
 
+	uint32_t Find_Memory_Type(uint32_t Type_Filter, VkMemoryPropertyFlags Property_Flags) {
+		VkPhysicalDeviceMemoryProperties Memory_Properties{};
+		vkGetPhysicalDeviceMemoryProperties(this->m_Physical_Device, &Memory_Properties);
+
+		for (uint32_t Index = 0; Index < Memory_Properties.memoryTypeCount; ++Index)
+			if (Type_Filter & (1 << Index) && (Memory_Properties.memoryTypes[Index].propertyFlags & Property_Flags) == Property_Flags)
+				return Index;
+
+		throw runtime_error("Failed to find suitable memory type!");
+
+		return numeric_limits<uint32_t>::max();
+	}
+
 private:
 	static void Initialize_GLWF(void) {
 		if (GLFW_FALSE == glfwInit())
@@ -1257,6 +1323,9 @@ private:
 	vector<unique_ptr<VkFramebuffer_T, function<void(VkFramebuffer)>>> m_Swap_Chain_Frame_buffers{};
 
 	unique_ptr<VkCommandPool_T, function<void(VkCommandPool)>> m_Command_Pool{ nullptr };
+
+	unique_ptr<VkBuffer_T, function<void(VkBuffer)>> m_Vertex_Buffer{ nullptr };
+	unique_ptr<VkDeviceMemory_T, function<void(VkDeviceMemory)>> m_Vertex_Buffer_Memory{ nullptr };
 
 	vector<VkCommandBuffer> m_Command_Buffers{};
 
