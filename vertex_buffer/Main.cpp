@@ -1198,7 +1198,7 @@ private:
 		return Shader_Module;
 	}
 
-	uint32_t Find_Memory_Type(uint32_t Type_Filter, VkMemoryPropertyFlags Property_Flags) {
+	uint32_t Find_Memory_Type(uint32_t Type_Filter, VkMemoryPropertyFlags Property_Flags) const {
 		VkPhysicalDeviceMemoryProperties Memory_Properties{};
 		vkGetPhysicalDeviceMemoryProperties(this->m_Physical_Device, &Memory_Properties);
 
