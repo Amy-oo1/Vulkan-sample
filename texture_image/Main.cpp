@@ -285,6 +285,7 @@ private:
 		this->Create_GraphicsPipeline();
 		this->Create_Frame_Buffers();
 		this->Create_Command_Pool();
+		this->Create_Texture_Image();
 		this->Create_Vertex_Buffer();
 		this->Create_Index_Buffer();
 		this->Create_Uniform_Buffers();
@@ -957,7 +958,7 @@ private:
 		this->m_Command_Pool.reset(Command_Pool);
 	}
 
-	void Create_Texture_Iamge(void) {
+	void Create_Texture_Image(void) {
 		int Width{ 0 }, Height{ 0 }, Channels{ 0 };
 		stbi_uc* Pixels = stbi_load(
 			std::filesystem::path{ Texture_Image_Path,std::filesystem::path::generic_format }.generic_string().c_str(),
@@ -1002,6 +1003,9 @@ private:
 
 		this->m_Texture_Image.get_deleter() = [Device = this->m_Logical_Device.get()](VkImage Texture_Image) {if (nullptr != Texture_Image) vkDestroyImage(Device, Texture_Image, nullptr); };
 		this->m_Texture_Image.reset(Texture_Image);
+
+		this->m_Texture_Image_Memory.get_deleter() = [Device = this->m_Logical_Device.get()](VkDeviceMemory Texture_Image_Memory) {if (nullptr != Texture_Image_Memory) vkFreeMemory(Device, Texture_Image_Memory, nullptr); };
+		this->m_Texture_Image_Memory.reset(Texture_Image_Memory);
 
 		this->Transition_Image_Layout(
 			this->m_Texture_Image.get(),
@@ -1600,34 +1604,25 @@ private:
 
 
 	void Transition_Image_Layout(VkImage Image, VkFormat Format, VkImageLayout Old_Layout, VkImageLayout New_Layout) {
-		VkCommandBufferAllocateInfo Allocate_Info{};
-		{
-			Allocate_Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-			Allocate_Info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-			Allocate_Info.commandPool = this->m_Command_Pool.get();
-			Allocate_Info.commandBufferCount = 1;
-		}
-
-		VkCommandBuffer Command_Buffer{ nullptr };
-		THROW_IF_VK_FAILED(vkAllocateCommandBuffers(this->m_Logical_Device.get(), &Allocate_Info, &Command_Buffer));
-
-		VkCommandBufferBeginInfo Begin_Info{};
-		{
-			Begin_Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			Begin_Info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		}
-
-		THROW_IF_VK_FAILED(vkBeginCommandBuffer(Command_Buffer, &Begin_Info));
+		VkCommandBuffer Command_Buffer{ this->Begin_SingleTime_Commands() };
 
 		VkAccessFlags Source_Access_Mask{}, Destination_Access_Mask{};
+
+		VkPipelineStageFlags Source_Stage{}, Destination_Stage{};
 		{
 			if (VK_IMAGE_LAYOUT_UNDEFINED == Old_Layout && VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL == New_Layout) {
 				Source_Access_Mask = VK_ACCESS_NONE;
 				Destination_Access_Mask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+				Source_Stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+				Destination_Stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			}
 			else if (VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL == Old_Layout && VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL == New_Layout) {
 				Source_Access_Mask = VK_ACCESS_TRANSFER_WRITE_BIT;
 				Destination_Access_Mask = VK_ACCESS_SHADER_READ_BIT;
+
+				Source_Stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+				Destination_Stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 			}
 			else
 				throw invalid_argument("Unsupported layout transition!");
@@ -1652,8 +1647,7 @@ private:
 
 		vkCmdPipelineBarrier(
 			Command_Buffer,
-			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			Source_Stage, Destination_Stage,
 			0,
 			0, nullptr,
 			0, nullptr,
