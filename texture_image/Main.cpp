@@ -27,6 +27,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 using namespace std;
 
 inline const char* vkResultToString(VkResult result) {
@@ -63,6 +66,8 @@ const constexpr char* Device_EXT_SwapChain{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 const constexpr char* Vertex_Shader_File_Path{ "shaders/vshader.spv" };
 const constexpr char* Fragment_Shader_File_Path{ "shaders/fshader.spv" };
+
+const constexpr char* Texture_Image_Path{ "textures/texture.jpg" };
 
 struct Vertex final {
 	glm::vec2 Pos;
@@ -331,14 +336,6 @@ private:
 		}
 
 		//vkDestroyDescriptorPool(this->m_Logical_Device.get(), this->m_Descriptor_Pool.get(), nullptr);
-		this->m_Descriptor_Pool.reset();
-
-		for (size_t Index = 0; Index < MAX_FRAMES_IN_FLIGHT; ++Index) {
-			//vkDestroyBuffer(this->m_Logical_Device.get(), this->m_Uniform_Buffers[Index].get(), nullptr);
-			this->m_Uniform_Buffers[Index].reset();
-			//vkFreeMemory(this->m_Logical_Device.get(), this->m_Uniform_Buffers_Memory[Index].get(), nullptr);
-			this->m_Uniform_Buffers_Memory[Index].reset();
-		}
 
 		//vkDestroyBuffer(this->m_Logical_Device.get(), this->m_Index_Buffer.get(), nullptr);
 		this->m_Index_Buffer.reset();
@@ -351,6 +348,21 @@ private:
 
 		//vkFreeMemory(this->m_Logical_Device.get(), this->m_Vertex_Buffer_Memory.get(), nullptr);
 		this->m_Vertex_Buffer_Memory.reset();
+
+		this->m_Descriptor_Pool.reset();
+
+		for (size_t Index = 0; Index < MAX_FRAMES_IN_FLIGHT; ++Index) {
+			//vkDestroyBuffer(this->m_Logical_Device.get(), this->m_Uniform_Buffers[Index].get(), nullptr);
+			this->m_Uniform_Buffers[Index].reset();
+			//vkFreeMemory(this->m_Logical_Device.get(), this->m_Uniform_Buffers_Memory[Index].get(), nullptr);
+			this->m_Uniform_Buffers_Memory[Index].reset();
+		}
+
+		//vkDestroyImage(this->m_Logical_Device.get(), this->m_Texture_Image.get(), nullptr);
+		this->m_Texture_Image.reset();
+
+		//vkFreeMemory(this->m_Logical_Device.get(), this->m_Texture_Image_Memory.get(), nullptr);
+		this->m_Texture_Image_Memory.reset();
 
 		//vkDestroyCommandPool(this->m_Logical_Device.get(), this->m_Command_Pool.get(), nullptr);
 		this->m_Command_Pool.reset();
@@ -945,75 +957,70 @@ private:
 		this->m_Command_Pool.reset(Command_Pool);
 	}
 
-	void Create_Vertex_Buffer(void) {
-		VkDeviceSize Buffer_Size = sizeof(Vertex) * Vertices.size();
+	void Create_Texture_Iamge(void) {
+		int Width{ 0 }, Height{ 0 }, Channels{ 0 };
+		stbi_uc* Pixels = stbi_load(
+			std::filesystem::path{ Texture_Image_Path,std::filesystem::path::generic_format }.generic_string().c_str(),
+			&Width,
+			&Height,
+			&Channels,
+			STBI_rgb_alpha
+		);
+		if (nullptr == Pixels)
+			throw runtime_error("Failed to load texture image!");
+
+		VkDeviceSize Image_Size = static_cast<VkDeviceSize>(Width * Height * 4);
 
 		VkBuffer Staging_Buffer{ nullptr };
 		VkDeviceMemory Staging_Buffer_Memory{ nullptr };
-		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, Staging_Buffer, Staging_Buffer_Memory);
+		this->Create_Buffer(
+			Image_Size,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			Staging_Buffer,
+			Staging_Buffer_Memory
+		);
 
 		void* Data{ nullptr };
-		THROW_IF_VK_FAILED(vkMapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, 0, Buffer_Size, 0, &Data));
-		memcpy(Data, Vertices.data(), static_cast<size_t>(Buffer_Size));
+		THROW_IF_VK_FAILED(vkMapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, 0, Image_Size, 0, &Data));
+		memcpy(Data, Pixels, static_cast<size_t>(Image_Size));
 		vkUnmapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory);
 
-		VkBuffer Vertex_Buffer{ nullptr };
-		VkDeviceMemory Vertex_Buffer_Memory{ nullptr };
+		stbi_image_free(Pixels);
 
-		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Vertex_Buffer, Vertex_Buffer_Memory);
+		VkImage Texture_Image{ nullptr };
+		VkDeviceMemory Texture_Image_Memory{ nullptr };
+		this->Create_Image(
+			Width, Height,
+			VK_FORMAT_R8G8B8A8_SRGB,
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			Texture_Image,
+			Texture_Image_Memory
+		);
 
-		this->m_Vertex_Buffer.get_deleter() = [Device = this->m_Logical_Device.get()](VkBuffer Vertex_Buffer) {if (nullptr != Vertex_Buffer) vkDestroyBuffer(Device, Vertex_Buffer, nullptr); };
-		this->m_Vertex_Buffer.reset(Vertex_Buffer);
+		this->m_Texture_Image.get_deleter() = [Device = this->m_Logical_Device.get()](VkImage Texture_Image) {if (nullptr != Texture_Image) vkDestroyImage(Device, Texture_Image, nullptr); };
+		this->m_Texture_Image.reset(Texture_Image);
 
-		this->m_Vertex_Buffer_Memory.get_deleter() = [Device = this->m_Logical_Device.get()](VkDeviceMemory Vertex_Buffer_Memory) {if (nullptr != Vertex_Buffer_Memory) vkFreeMemory(Device, Vertex_Buffer_Memory, nullptr); };
-		this->m_Vertex_Buffer_Memory.reset(Vertex_Buffer_Memory);
+		this->Transition_Image_Layout(
+			this->m_Texture_Image.get(),
+			VK_FORMAT_R8G8B8A8_SRGB,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+		);
 
-		this->Copy_Buffer(Staging_Buffer, this->m_Vertex_Buffer.get(), Buffer_Size);
+		this->Copy_Buffer_To_Image(Staging_Buffer, this->m_Texture_Image.get(), static_cast<uint32_t>(Width), static_cast<uint32_t>(Height));
+
+		this->Transition_Image_Layout(
+			this->m_Texture_Image.get(),
+			VK_FORMAT_R8G8B8A8_SRGB,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		);
 
 		vkDestroyBuffer(this->m_Logical_Device.get(), Staging_Buffer, nullptr);
 		vkFreeMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, nullptr);
-	}
-
-	void Create_Index_Buffer(void) {
-		VkDeviceSize Buffer_Size{ sizeof(uint16_t) * Indices.size() };
-
-		VkBuffer Staging_Buffer{ nullptr };
-		VkDeviceMemory Staging_Buffer_Memory{ nullptr };
-		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, Staging_Buffer, Staging_Buffer_Memory);
-
-		void* Data{ nullptr };
-		THROW_IF_VK_FAILED(vkMapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, 0, Buffer_Size, 0, &Data));
-		memcpy(Data, Indices.data(), static_cast<size_t>(Buffer_Size));
-		vkUnmapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory);
-
-		VkBuffer Index_Buffer{ nullptr };
-		VkDeviceMemory Index_Buffer_Memory{ nullptr };
-		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Index_Buffer, Index_Buffer_Memory);
-
-		this->m_Index_Buffer.get_deleter() = [Device = this->m_Logical_Device.get()](VkBuffer Index_Buffer) {if (nullptr != Index_Buffer) vkDestroyBuffer(Device, Index_Buffer, nullptr); };
-		this->m_Index_Buffer.reset(Index_Buffer);
-
-		this->m_Index_Buffer_Memory.get_deleter() = [Device = this->m_Logical_Device.get()](VkDeviceMemory Index_Buffer_Memory) {if (nullptr != Index_Buffer_Memory) vkFreeMemory(Device, Index_Buffer_Memory, nullptr); };
-		this->m_Index_Buffer_Memory.reset(Index_Buffer_Memory);
-
-		this->Copy_Buffer(Staging_Buffer, this->m_Index_Buffer.get(), Buffer_Size);
-
-		vkDestroyBuffer(this->m_Logical_Device.get(), Staging_Buffer, nullptr);
-		vkFreeMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, nullptr);
-	}
-
-	void Create_Command_Buffers(void) {
-		this->m_Command_Buffers.resize(MAX_FRAMES_IN_FLIGHT);
-
-		VkCommandBufferAllocateInfo Command_Buffer_Allocate_Info{};
-		{
-			Command_Buffer_Allocate_Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-			Command_Buffer_Allocate_Info.commandPool = this->m_Command_Pool.get();
-			Command_Buffer_Allocate_Info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-			Command_Buffer_Allocate_Info.commandBufferCount = static_cast<uint32_t>(m_Command_Buffers.size());
-		}
-
-		THROW_IF_VK_FAILED(vkAllocateCommandBuffers(this->m_Logical_Device.get(), &Command_Buffer_Allocate_Info, this->m_Command_Buffers.data()));
 	}
 
 	void Create_Uniform_Buffers(void) {
@@ -1103,6 +1110,77 @@ private:
 			vkUpdateDescriptorSets(this->m_Logical_Device.get(), 1, &Descriptor_Write, 0, nullptr);
 		}
 
+	}
+
+	void Create_Vertex_Buffer(void) {
+		VkDeviceSize Buffer_Size = sizeof(Vertex) * Vertices.size();
+
+		VkBuffer Staging_Buffer{ nullptr };
+		VkDeviceMemory Staging_Buffer_Memory{ nullptr };
+		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, Staging_Buffer, Staging_Buffer_Memory);
+
+		void* Data{ nullptr };
+		THROW_IF_VK_FAILED(vkMapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, 0, Buffer_Size, 0, &Data));
+		memcpy(Data, Vertices.data(), static_cast<size_t>(Buffer_Size));
+		vkUnmapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory);
+
+		VkBuffer Vertex_Buffer{ nullptr };
+		VkDeviceMemory Vertex_Buffer_Memory{ nullptr };
+
+		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Vertex_Buffer, Vertex_Buffer_Memory);
+
+		this->m_Vertex_Buffer.get_deleter() = [Device = this->m_Logical_Device.get()](VkBuffer Vertex_Buffer) {if (nullptr != Vertex_Buffer) vkDestroyBuffer(Device, Vertex_Buffer, nullptr); };
+		this->m_Vertex_Buffer.reset(Vertex_Buffer);
+
+		this->m_Vertex_Buffer_Memory.get_deleter() = [Device = this->m_Logical_Device.get()](VkDeviceMemory Vertex_Buffer_Memory) {if (nullptr != Vertex_Buffer_Memory) vkFreeMemory(Device, Vertex_Buffer_Memory, nullptr); };
+		this->m_Vertex_Buffer_Memory.reset(Vertex_Buffer_Memory);
+
+		this->Copy_Buffer(Staging_Buffer, this->m_Vertex_Buffer.get(), Buffer_Size);
+
+		vkDestroyBuffer(this->m_Logical_Device.get(), Staging_Buffer, nullptr);
+		vkFreeMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, nullptr);
+	}
+
+	void Create_Index_Buffer(void) {
+		VkDeviceSize Buffer_Size{ sizeof(uint16_t) * Indices.size() };
+
+		VkBuffer Staging_Buffer{ nullptr };
+		VkDeviceMemory Staging_Buffer_Memory{ nullptr };
+		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, Staging_Buffer, Staging_Buffer_Memory);
+
+		void* Data{ nullptr };
+		THROW_IF_VK_FAILED(vkMapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, 0, Buffer_Size, 0, &Data));
+		memcpy(Data, Indices.data(), static_cast<size_t>(Buffer_Size));
+		vkUnmapMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory);
+
+		VkBuffer Index_Buffer{ nullptr };
+		VkDeviceMemory Index_Buffer_Memory{ nullptr };
+		this->Create_Buffer(Buffer_Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Index_Buffer, Index_Buffer_Memory);
+
+		this->m_Index_Buffer.get_deleter() = [Device = this->m_Logical_Device.get()](VkBuffer Index_Buffer) {if (nullptr != Index_Buffer) vkDestroyBuffer(Device, Index_Buffer, nullptr); };
+		this->m_Index_Buffer.reset(Index_Buffer);
+
+		this->m_Index_Buffer_Memory.get_deleter() = [Device = this->m_Logical_Device.get()](VkDeviceMemory Index_Buffer_Memory) {if (nullptr != Index_Buffer_Memory) vkFreeMemory(Device, Index_Buffer_Memory, nullptr); };
+		this->m_Index_Buffer_Memory.reset(Index_Buffer_Memory);
+
+		this->Copy_Buffer(Staging_Buffer, this->m_Index_Buffer.get(), Buffer_Size);
+
+		vkDestroyBuffer(this->m_Logical_Device.get(), Staging_Buffer, nullptr);
+		vkFreeMemory(this->m_Logical_Device.get(), Staging_Buffer_Memory, nullptr);
+	}
+
+	void Create_Command_Buffers(void) {
+		this->m_Command_Buffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+		VkCommandBufferAllocateInfo Command_Buffer_Allocate_Info{};
+		{
+			Command_Buffer_Allocate_Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+			Command_Buffer_Allocate_Info.commandPool = this->m_Command_Pool.get();
+			Command_Buffer_Allocate_Info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+			Command_Buffer_Allocate_Info.commandBufferCount = static_cast<uint32_t>(m_Command_Buffers.size());
+		}
+
+		THROW_IF_VK_FAILED(vkAllocateCommandBuffers(this->m_Logical_Device.get(), &Command_Buffer_Allocate_Info, this->m_Command_Buffers.data()));
 	}
 
 	void Record_Command_Buffer(VkCommandBuffer Command_Buffer, uint32_t Image_Index) {
@@ -1432,7 +1510,7 @@ private:
 		THROW_IF_VK_FAILED(vkBindBufferMemory(this->m_Logical_Device.get(), Buffer, Buffer_Memory, 0));
 	}
 
-	void Copy_Buffer(VkBuffer Source_Buffer, VkBuffer Destination_Buffer, VkDeviceSize Size) {
+	const VkCommandBuffer Begin_SingleTime_Commands(void) {
 		VkCommandBufferAllocateInfo Allocate_Info{};
 		{
 			Allocate_Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1452,15 +1530,10 @@ private:
 
 		THROW_IF_VK_FAILED(vkBeginCommandBuffer(Command_Buffer, &Begin_Info));
 
-		VkBufferCopy Copy_Region{};
-		{
-			Copy_Region.srcOffset = 0;
-			Copy_Region.dstOffset = 0;
-			Copy_Region.size = Size;
-		}
+		return Command_Buffer;
+	}
 
-		vkCmdCopyBuffer(Command_Buffer, Source_Buffer, Destination_Buffer, 1, &Copy_Region);
-
+	void End_SingleTime_Commands(VkCommandBuffer Command_Buffer) {
 		THROW_IF_VK_FAILED(vkEndCommandBuffer(Command_Buffer));
 
 		VkSubmitInfo Submit_Info{};
@@ -1475,6 +1548,140 @@ private:
 		THROW_IF_VK_FAILED(vkQueueWaitIdle(this->m_Graphics_Queue));
 
 		vkFreeCommandBuffers(this->m_Logical_Device.get(), this->m_Command_Pool.get(), 1, &Command_Buffer);
+	}
+
+	void Copy_Buffer(VkBuffer Source_Buffer, VkBuffer Destination_Buffer, VkDeviceSize Size) {
+		VkCommandBuffer Command_Buffer{ this->Begin_SingleTime_Commands() };
+
+		VkBufferCopy Copy_Region{};
+		{
+			Copy_Region.size = Size;
+		}
+
+		vkCmdCopyBuffer(Command_Buffer, Source_Buffer, Destination_Buffer, 1, &Copy_Region);
+
+		this->End_SingleTime_Commands(Command_Buffer);
+	}
+
+	void Create_Image(uint32_t Width, uint32_t Height, VkFormat Format, VkImageTiling Tiling, VkImageUsageFlags Usage, VkMemoryPropertyFlags Properties, VkImage& Image, VkDeviceMemory& Image_Memory) {
+		VkImageCreateInfo Image_Info{};
+		{
+			Image_Info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			Image_Info.imageType = VK_IMAGE_TYPE_2D;
+			Image_Info.extent.width = Width;
+			Image_Info.extent.height = Height;
+			Image_Info.extent.depth = 1;
+			Image_Info.mipLevels = 1;
+			Image_Info.arrayLayers = 1;
+			Image_Info.format = Format;
+			Image_Info.tiling = Tiling;
+			Image_Info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			Image_Info.usage = Usage;
+			Image_Info.samples = VK_SAMPLE_COUNT_1_BIT;
+			Image_Info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		}
+
+		THROW_IF_VK_FAILED(vkCreateImage(this->m_Logical_Device.get(), &Image_Info, nullptr, &Image));
+
+		VkMemoryRequirements Memory_Requirements{};
+		vkGetImageMemoryRequirements(this->m_Logical_Device.get(), Image, &Memory_Requirements);
+
+		VkMemoryAllocateInfo Memory_Allocate_Info{};
+		{
+			Memory_Allocate_Info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			Memory_Allocate_Info.allocationSize = Memory_Requirements.size;
+			Memory_Allocate_Info.memoryTypeIndex = this->Find_Memory_Type(Memory_Requirements.memoryTypeBits, Properties);
+		}
+
+		THROW_IF_VK_FAILED(vkAllocateMemory(this->m_Logical_Device.get(), &Memory_Allocate_Info, nullptr, &Image_Memory));
+
+		THROW_IF_VK_FAILED(vkBindImageMemory(this->m_Logical_Device.get(), Image, Image_Memory, 0));
+	}
+
+
+	void Transition_Image_Layout(VkImage Image, VkFormat Format, VkImageLayout Old_Layout, VkImageLayout New_Layout) {
+		VkCommandBufferAllocateInfo Allocate_Info{};
+		{
+			Allocate_Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+			Allocate_Info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+			Allocate_Info.commandPool = this->m_Command_Pool.get();
+			Allocate_Info.commandBufferCount = 1;
+		}
+
+		VkCommandBuffer Command_Buffer{ nullptr };
+		THROW_IF_VK_FAILED(vkAllocateCommandBuffers(this->m_Logical_Device.get(), &Allocate_Info, &Command_Buffer));
+
+		VkCommandBufferBeginInfo Begin_Info{};
+		{
+			Begin_Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			Begin_Info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		}
+
+		THROW_IF_VK_FAILED(vkBeginCommandBuffer(Command_Buffer, &Begin_Info));
+
+		VkAccessFlags Source_Access_Mask{}, Destination_Access_Mask{};
+		{
+			if (VK_IMAGE_LAYOUT_UNDEFINED == Old_Layout && VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL == New_Layout) {
+				Source_Access_Mask = VK_ACCESS_NONE;
+				Destination_Access_Mask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			}
+			else if (VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL == Old_Layout && VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL == New_Layout) {
+				Source_Access_Mask = VK_ACCESS_TRANSFER_WRITE_BIT;
+				Destination_Access_Mask = VK_ACCESS_SHADER_READ_BIT;
+			}
+			else
+				throw invalid_argument("Unsupported layout transition!");
+		}
+
+		VkImageMemoryBarrier Barrier{};
+		{
+			Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			Barrier.oldLayout = Old_Layout;
+			Barrier.newLayout = New_Layout;
+			Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			Barrier.image = Image;
+			Barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			Barrier.subresourceRange.baseMipLevel = 0;
+			Barrier.subresourceRange.levelCount = 1;
+			Barrier.subresourceRange.baseArrayLayer = 0;
+			Barrier.subresourceRange.layerCount = 1;
+			Barrier.srcAccessMask = Source_Access_Mask;
+			Barrier.dstAccessMask = Destination_Access_Mask;
+		}
+
+		vkCmdPipelineBarrier(
+			Command_Buffer,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			0,
+			0, nullptr,
+			0, nullptr,
+			1, &Barrier
+		);
+
+		THROW_IF_VK_FAILED(vkEndCommandBuffer(Command_Buffer));
+	}
+
+	void Copy_Buffer_To_Image(VkBuffer Buffer, VkImage Image, uint32_t Width, uint32_t Height) {
+		VkCommandBuffer Command_Buffer{ this->Begin_SingleTime_Commands() };
+
+		VkBufferImageCopy Region{};
+		{
+			Region.bufferOffset = 0;
+			Region.bufferRowLength = 0;
+			Region.bufferImageHeight = 0;
+			Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			Region.imageSubresource.mipLevel = 0;
+			Region.imageSubresource.baseArrayLayer = 0;
+			Region.imageSubresource.layerCount = 1;
+			Region.imageOffset = { 0, 0, 0 };
+			Region.imageExtent = { Width, Height, 1 };
+		}
+
+		vkCmdCopyBufferToImage(Command_Buffer, Buffer, Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Region);
+
+		THROW_IF_VK_FAILED(vkEndCommandBuffer(Command_Buffer));
 	}
 
 private:
@@ -1593,11 +1800,8 @@ private:
 
 	unique_ptr<VkCommandPool_T, function<void(VkCommandPool)>> m_Command_Pool{ nullptr };
 
-	unique_ptr<VkBuffer_T, function<void(VkBuffer)>> m_Vertex_Buffer{ nullptr };
-	unique_ptr<VkDeviceMemory_T, function<void(VkDeviceMemory)>> m_Vertex_Buffer_Memory{ nullptr };
-
-	unique_ptr<VkBuffer_T, function<void(VkBuffer)>> m_Index_Buffer{ nullptr };
-	unique_ptr<VkDeviceMemory_T, function<void(VkDeviceMemory)>> m_Index_Buffer_Memory{ nullptr };
+	unique_ptr<VkImage_T, function<void(VkImage)>> m_Texture_Image{ nullptr };
+	unique_ptr<VkDeviceMemory_T, function<void(VkDeviceMemory)>> m_Texture_Image_Memory{ nullptr };
 
 	vector<unique_ptr<VkBuffer_T, function<void(VkBuffer)>>> m_Uniform_Buffers{};
 	vector<unique_ptr<VkDeviceMemory_T, function<void(VkDeviceMemory)>>> m_Uniform_Buffers_Memory{};
@@ -1605,6 +1809,12 @@ private:
 
 	unique_ptr<VkDescriptorPool_T, function<void(VkDescriptorPool)>> m_Descriptor_Pool{ nullptr };
 	vector<VkDescriptorSet> m_Descriptor_Sets{};
+
+	unique_ptr<VkBuffer_T, function<void(VkBuffer)>> m_Vertex_Buffer{ nullptr };
+	unique_ptr<VkDeviceMemory_T, function<void(VkDeviceMemory)>> m_Vertex_Buffer_Memory{ nullptr };
+
+	unique_ptr<VkBuffer_T, function<void(VkBuffer)>> m_Index_Buffer{ nullptr };
+	unique_ptr<VkDeviceMemory_T, function<void(VkDeviceMemory)>> m_Index_Buffer_Memory{ nullptr };
 
 	vector<VkCommandBuffer> m_Command_Buffers{};
 
