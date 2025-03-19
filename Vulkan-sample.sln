@@ -51,6 +51,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "descriptor_sets", "descript
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "texture_image", "texture_image\texture_image.vcxproj", "{3FD7AEA4-D003-47DC-9998-364B0C0B91F1}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sample", "sample\sample.vcxproj", "{50E8C639-0E59-4ED8-95DE-06353D064FF7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -251,6 +253,14 @@ Global
 		{3FD7AEA4-D003-47DC-9998-364B0C0B91F1}.Release|x64.Build.0 = Release|x64
 		{3FD7AEA4-D003-47DC-9998-364B0C0B91F1}.Release|x86.ActiveCfg = Release|Win32
 		{3FD7AEA4-D003-47DC-9998-364B0C0B91F1}.Release|x86.Build.0 = Release|Win32
+		{50E8C639-0E59-4ED8-95DE-06353D064FF7}.Debug|x64.ActiveCfg = Debug|x64
+		{50E8C639-0E59-4ED8-95DE-06353D064FF7}.Debug|x64.Build.0 = Debug|x64
+		{50E8C639-0E59-4ED8-95DE-06353D064FF7}.Debug|x86.ActiveCfg = Debug|Win32
+		{50E8C639-0E59-4ED8-95DE-06353D064FF7}.Debug|x86.Build.0 = Debug|Win32
+		{50E8C639-0E59-4ED8-95DE-06353D064FF7}.Release|x64.ActiveCfg = Release|x64
+		{50E8C639-0E59-4ED8-95DE-06353D064FF7}.Release|x64.Build.0 = Release|x64
+		{50E8C639-0E59-4ED8-95DE-06353D064FF7}.Release|x86.ActiveCfg = Release|Win32
+		{50E8C639-0E59-4ED8-95DE-06353D064FF7}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
