@@ -1,3 +1,48 @@
+#if defined(_MSC_VER)
+#include <sdkddkver.h>
+#define WIN32_LEAN_AND_MEAN 1
+#define NOGDICAPMASKS 1
+#define NOVIRTUALKEYCODES 1
+#define NOWINMESSAGES 1
+#define NOWINSTYLES 1
+#define NOSYSMETRICS 1
+#define NOMENUS 1
+#define NOICONS 1
+#define NOKEYSTATES 1
+#define NOSYSCOMMANDS 1
+#define NORASTEROPS 1
+#define NOSHOWWINDOW 1
+#define NOATOM 1
+#define NOCLIPBOARD 1
+#define NOCOLOR 1
+#define NOCTLMGR 1
+#define NODRAWTEXT 1
+#define NOGDI 1
+#define NOKERNEL 1
+#define NOUSER 1
+#define NONLS 1
+#define NOMB 1
+#define NOMEMMGR 1
+#define NOMETAFILE 1
+#define NOMINMAX 1
+#define NOMSG 1
+#define NOOPENFILE 1
+#define NOSCROLL 1
+#define NOSERVICE 1
+#define NOSOUND 1
+#define NOTEXTMETRIC 1
+#define NOWH 1
+#define NOWINOFFSETS 1
+#define NOCOMM 1
+#define NOKANJI 1
+#define NOHELP 1
+#define NOPROFILER 1
+#define NODEFERWINDOWPOS 1
+#define NOMCX 1
+#include <Windows.h>
+#endif
+
+
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -17,7 +62,47 @@ using namespace std;
 constexpr int WIDTH{ 800 };
 constexpr int HEIGHT{ 600 };
 
+static std::mutex g_alloc_mutex;
+
 const constexpr char* validationLayers{ "VK_LAYER_KHRONOS_validation" };
+static void* VKAPI_CALL S_Allocation(void* pUserData, size_t size, size_t alignment, VkSystemAllocationScope) {
+#if defined(_WIN32)
+	std::lock_guard<std::mutex> lock(g_alloc_mutex);
+	return _aligned_malloc(size, alignment);
+#else
+	void* ptr = nullptr;
+	posix_memalign(&ptr, alignment, size);
+	return ptr;
+#endif
+}
+
+static void* VKAPI_CALL S_Reallocation(
+	void* pUserData,
+	void* original,
+	size_t size,
+	size_t alignment,
+	VkSystemAllocationScope allocationScope) {
+	std::lock_guard<std::mutex> lock(g_alloc_mutex);
+	if (size == 0) {
+		_aligned_free(original);
+		return nullptr;
+	}
+
+	void* new_mem = _aligned_malloc(size, alignment);
+	if (!new_mem) return nullptr;
+
+	_aligned_free(original);
+	return new_mem;
+}
+
+static void VKAPI_CALL S_Free(void* pUserData, void* memory) {
+#if defined(_WIN32)
+	std::lock_guard<std::mutex> lock(g_alloc_mutex);
+	_aligned_free(memory);
+#else
+	free(memory);
+#endif
+}
 
 class VK_Application final {
 public:
@@ -191,8 +276,20 @@ private:
 			VK_Instance_Info.ppEnabledExtensionNames = Extensions.data();
 		}
 
-		if (VK_SUCCESS != vkCreateInstance(&VK_Instance_Info, nullptr, &this->m_VK_Instance))
+		VkAllocationCallbacks Allocator{};
+		{
+			Allocator.pUserData = nullptr;
+			Allocator.pfnAllocation =static_cast<PFN_vkAllocationFunction>(S_Allocation);
+			Allocator.pfnReallocation = static_cast<PFN_vkReallocationFunction>(S_Reallocation);
+			Allocator.pfnFree = static_cast<PFN_vkFreeFunction>(S_Free);
+		}
+
+		if (VK_SUCCESS != vkCreateInstance(&VK_Instance_Info,nullptr/* &Allocator*/, &this->m_VK_Instance))
 			throw std::runtime_error("failed to create instance!");
+
+		uint32_t Group_Count;
+		//vkEnumeratePhysicalDeviceGroups(this->m_VK_Instance, &Group_Count, nullptr);
+		vkEnumeratePhysicalDevices(this->m_VK_Instance, &Group_Count, nullptr);
 	}
 
 private:
@@ -228,6 +325,8 @@ private:
 int main() {
 
 	try {
+
+		SetEnvironmentVariableA("DISABLE_LAYER_AMD_SWITCHABLE_GRAPHICS_1", "1");
 		VK_Application App{};
 
 #ifdef _DEBUG
